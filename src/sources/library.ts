@@ -1,5 +1,6 @@
 import type { SearchResult } from '../types';
 import { classifyLicense } from '../lib/license';
+import { expandQuery, hasHebrew, type TermsFile } from '../lib/terms';
 
 /** פריט באינדקס של מאגר המורים (נוצר ע"י scripts/build-library.mjs) */
 export interface LibraryItem {
@@ -33,7 +34,19 @@ export function tokenize(s: string): string[] {
 }
 
 /** רדוקציה גסה לריבוי באנגלית: kidneys -> kidney */
-const stem = (t: string) => (t.length > 3 && t.endsWith('s') ? t.slice(0, -1) : t);
+const stem = (t: string) => {
+  if (hasHebrew(t)) return t.length > 3 && t.startsWith('ה') ? t.slice(1) : t; // הלב ~ לב
+  return t.length > 3 && t.endsWith('s') ? t.slice(0, -1) : t;
+};
+
+/** קבצים בשם עברי: מוסיפים להם גם מילות מפתח באנגלית לפי מילון המונחים */
+export function withEnglishKeywords(item: LibraryItem, terms: TermsFile | null): LibraryItem {
+  if (!terms || !item.keywords.some(hasHebrew)) return item;
+  const extra = new Set<string>();
+  const phrases = [item.keywords.join(' '), ...item.keywords.filter(hasHebrew)];
+  for (const p of phrases) for (const en of expandQuery(p, terms).english) for (const t of tokenize(en)) extra.add(t);
+  return extra.size ? { ...item, keywords: [...item.keywords, ...extra] } : item;
+}
 
 /**
  * התאמה בין מילות חיפוש לפריט: כל מילה שמופיעה במילות המפתח (או כתחילית שלהן) מוסיפה ניקוד.
@@ -73,8 +86,8 @@ export function toResult(item: LibraryItem): SearchResult {
 }
 
 /** חיפוש במאגר המורים לפי רשימת ביטויים (אנגלית + עברית); בלי ביטויים — כל המאגר */
-export async function searchLibrary(phrases: string[]): Promise<SearchResult[]> {
-  const items = await loadLibrary();
+export async function searchLibrary(phrases: string[], terms: TermsFile | null = null): Promise<SearchResult[]> {
+  const items = (await loadLibrary()).map((it) => withEnglishKeywords(it, terms));
   const tokens = phrases.flatMap(tokenize);
   if (!tokens.length) return items.map(toResult);
   return items

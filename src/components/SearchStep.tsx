@@ -84,7 +84,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
   const fetchSource = useCallback(
     async (src: Src, term: string, prev: SourceState | null, signal: AbortSignal, extra: string[] = []) => {
       if (src === 'library') {
-        const r = await searchLibrary([term, ...extra]);
+        const r = await searchLibrary([term, ...extra], terms);
         return { results: r, state: { status: 'ok', hasMore: false } as SourceState };
       }
       if (src === 'commons') {
@@ -99,7 +99,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
       const p = await searchOpenverse(`${plainTerm(term)} anatomy`, prev?.next ?? 1, signal);
       return { results: p.results, state: { status: 'ok', next: p.next, hasMore: p.next !== undefined } as SourceState };
     },
-    [kind, showUnclear],
+    [kind, showUnclear, terms],
   );
 
   const runSearch = useCallback(
@@ -205,7 +205,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
       setStates({ ...IDLE, commons: { status: 'loading' }, library: { status: enabled.library ? 'loading' : 'idle' } });
       setTopic({ topic: t, terms: topicTerms, loaded: 0, loading: true });
       if (enabled.library) {
-        searchLibrary(topicTerms.flatMap((x) => [x.en, x.he]))
+        searchLibrary(topicTerms.flatMap((x) => [x.en, x.he]), terms)
           .then((lib) => {
             if (seq !== searchSeq.current) return;
             setResults((prev) => [...lib.map((x) => ({ ...x, topic: 'מאגר המורים', topicIdx: -1 })), ...prev]);

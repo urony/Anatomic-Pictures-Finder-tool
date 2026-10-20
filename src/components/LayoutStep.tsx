@@ -130,6 +130,20 @@ export function LayoutStep({ images, settings, setSettings, onReorder, onMove, g
           <p className="small warn">רישיונות רבים (כמו CC BY) מחייבים קרדיט. כדאי להשאיר אותו מופעל, או לציין את הקרדיט בדרך אחרת.</p>
         )}
 
+        <h3>צבע התמונות (להדפסה)</h3>
+        <select value={settings.bwMode} onChange={(e) => set({ bwMode: e.target.value as Settings['bwMode'] })}>
+          <option value="off">צבעוני (כמו במקור)</option>
+          <option value="gray">גווני אפור</option>
+          <option value="contrast">שחור-לבן בניגודיות מוגברת</option>
+        </select>
+        {settings.bwMode === 'contrast' && (
+          <label>
+            עוצמת הניגודיות: {settings.bwStrength}
+            <input type="range" min={0} max={100} step={5} value={settings.bwStrength} onChange={(e) => set({ bwStrength: Number(e.target.value) })} />
+          </label>
+        )}
+        {settings.bwMode !== 'off' && <p className="small muted">חל על התמונות בכל הייצואים (PDF, Word, תמונה, הדפסה). המספרים והחצים נשארים שחורים עם מסגרת לבנה.</p>}
+
         <h3>נייר</h3>
         <div className="row">
           <select value={settings.paper} onChange={(e) => set({ paper: e.target.value as Settings['paper'] })}>

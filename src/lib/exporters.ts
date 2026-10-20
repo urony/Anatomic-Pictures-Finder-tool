@@ -17,7 +17,7 @@ import {
 } from 'docx';
 import type { ExamImage, Project, Settings } from '../types';
 import { figureLetter, layoutDocument, MARGIN, type PageLayout } from './layout';
-import { canvasToBlob, loadElements, renderMarkedImage, renderPage } from './render';
+import { bwOf, canvasToBlob, loadElements, renderMarkedImage, renderPage } from './render';
 import { importFromProject } from './projectIo';
 
 export const EXPORT_SCALE = 3; // ~216 dpi
@@ -53,7 +53,7 @@ export async function exportPdf(images: ExamImage[], s: Settings, progress?: Pro
   pdf.setProducer('Anatomy Exam Builder');
   for (let i = 0; i < layouts.length; i++) {
     const L = layouts[i];
-    const canvas = renderPage(L, els, { scale: EXPORT_SCALE, markSize: s.markSize });
+    const canvas = renderPage(L, els, { scale: EXPORT_SCALE, markSize: s.markSize, bw: bwOf(s) });
     const blob = await canvasToBlob(canvas, 'image/jpeg', 0.95);
     const jpg = await pdf.embedJpg(new Uint8Array(await blob.arrayBuffer()));
     const page = pdf.addPage([L.paperW, L.paperH]);
@@ -71,14 +71,14 @@ export async function exportPagePng(images: ExamImage[], s: Settings, pageIndex:
   const layouts = layoutDocument(images, s);
   const els = await loadElements(images);
   const L = layouts[Math.min(pageIndex, layouts.length - 1)];
-  return canvasToBlob(renderPage(L, els, { scale: EXPORT_SCALE, markSize: s.markSize }), type, 0.95);
+  return canvasToBlob(renderPage(L, els, { scale: EXPORT_SCALE, markSize: s.markSize, bw: bwOf(s) }), type, 0.95);
 }
 
 export async function exportMarkedImage(image: ExamImage, s: Settings, withMarks: boolean, type: 'image/png' | 'image/jpeg'): Promise<Blob> {
   const els = await loadElements([image]);
   const el = els.get(image.id)!;
   const forExport = withMarks ? image : { ...image, marks: [] };
-  return canvasToBlob(renderMarkedImage(forExport, el, s.markSize, 420, 2400), type, 0.95);
+  return canvasToBlob(renderMarkedImage(forExport, el, s.markSize, 420, 2400, bwOf(s)), type, 0.95);
 }
 
 /* ------------------------------ Print ------------------------------ */
@@ -88,7 +88,7 @@ export async function printDocument(images: ExamImage[], s: Settings): Promise<v
   const els = await loadElements(images);
   const urls: string[] = [];
   for (const L of layouts) {
-    const c = renderPage(L, els, { scale: 2.4, markSize: s.markSize });
+    const c = renderPage(L, els, { scale: 2.4, markSize: s.markSize, bw: bwOf(s) });
     urls.push(URL.createObjectURL(await canvasToBlob(c, 'image/jpeg', 0.92)));
   }
   const L0 = layouts[0];
@@ -186,7 +186,7 @@ export async function exportDocx(images: ExamImage[], s: Settings, progress?: Pr
         const el = els.get(p.image.id)!;
         const wPt = p.rect.w;
         const hPt = p.rect.h;
-        const canvas = renderMarkedImage(p.image, el, s.markSize, wPt, 1500);
+        const canvas = renderMarkedImage(p.image, el, s.markSize, wPt, 1500, bwOf(s));
         return { p, canvas, wPt, hPt };
       });
       const blobs = await Promise.all(cells.map((c) => canvasToBlob(c.canvas, 'image/jpeg', 0.9)));

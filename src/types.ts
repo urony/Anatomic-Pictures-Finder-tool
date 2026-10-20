@@ -94,6 +94,10 @@ export interface Settings {
   pickCount: number;
   tableCols: { en: boolean; fn: boolean };
   tableInstructions: string;
+  /** צבע התמונות: מקוריות / גווני אפור / שחור-לבן בניגודיות מוגברת (להדפסה) */
+  bwMode: 'off' | 'gray' | 'contrast';
+  /** עוצמת הניגודיות במצב contrast (0–100) */
+  bwStrength: number;
   numbering: 'continuous' | 'restart';
   showCredits: boolean;
   showCaptions: boolean;
@@ -127,6 +131,8 @@ export const DEFAULT_SETTINGS: Settings = {
   pickCount: 4,
   tableCols: { en: true, fn: true },
   tableInstructions: TABLE_INSTR_ALL,
+  bwMode: 'off',
+  bwStrength: 50,
   numbering: 'continuous',
   showCredits: true,
   showCaptions: true,

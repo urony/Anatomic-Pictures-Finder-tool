@@ -283,3 +283,53 @@ describe('covers', () => {
     expect(c[1].color).toBe('#ffffff');
   });
 });
+
+import { withEnglishKeywords } from '../sources/library';
+describe('Hebrew file names in the library', () => {
+  const file = terms as unknown as TermsFile;
+  it('match Hebrew queries, with or without the definite article', () => {
+    const it = { file: 'שחלה_זקיק.jpg', title: 'שחלה זקיק', keywords: tokenize('שחלה_זקיק') };
+    expect(scoreItem(it, tokenize('שחלה'))).toBeGreaterThan(0);
+    expect(scoreItem(it, tokenize('השחלה'))).toBeGreaterThan(0);
+    expect(scoreItem(it, tokenize('כליה'))).toBe(0);
+  });
+  it('also match English searches through the dictionary', () => {
+    const it = withEnglishKeywords({ file: 'רחם.png', title: 'רחם', keywords: ['רחם'] }, file);
+    expect(scoreItem(it, tokenize('uterus'))).toBeGreaterThan(0);
+    const kidney = withEnglishKeywords({ file: 'כליה.png', title: 'כליה', keywords: ['כליה'] }, file);
+    expect(scoreItem(kidney, tokenize('kidney'))).toBeGreaterThan(0);
+  });
+  it('percent-encodes Hebrew paths for the URL', () => {
+    const r = toResult({ file: 'שחלה.jpg', title: 'שחלה', keywords: ['שחלה'] });
+    expect(r.fullUrl).toContain(encodeURIComponent('שחלה.jpg'));
+  });
+});
+
+import { bwLut } from './render';
+describe('black & white conversion', () => {
+  const hist = (vals: number[]) => {
+    const h = new Uint32Array(256);
+    vals.forEach((v) => h[v]++);
+    return h;
+  };
+  it('gray mode leaves levels unchanged', () => {
+    const lut = bwLut(hist([10, 200]), 2, 'gray', 50);
+    expect(lut[10]).toBe(10);
+    expect(lut[200]).toBe(200);
+  });
+  it('contrast mode is monotonic and pushes darks darker / lights lighter', () => {
+    const vals = Array.from({ length: 100 }, (_, i) => 60 + i); // תמונה "דהויה": 60..159
+    const lut = bwLut(hist(vals), vals.length, 'contrast', 60);
+    for (let i = 1; i < 256; i++) expect(lut[i]).toBeGreaterThanOrEqual(lut[i - 1]);
+    expect(lut[65]).toBeLessThan(65);
+    expect(lut[155]).toBeGreaterThan(155);
+    expect(lut[255]).toBe(255);
+  });
+  it('stronger setting increases contrast', () => {
+    const vals = Array.from({ length: 100 }, (_, i) => 40 + i * 2);
+    const weak = bwLut(hist(vals), 100, 'contrast', 10);
+    const strong = bwLut(hist(vals), 100, 'contrast', 100);
+    expect(strong[60]).toBeLessThanOrEqual(weak[60]);
+    expect(strong[200]).toBeGreaterThanOrEqual(weak[200]);
+  });
+});

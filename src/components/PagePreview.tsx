@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ExamImage, Settings } from '../types';
 import { layoutDocument } from '../lib/layout';
-import { canvasToBlob, loadElements, renderPage } from '../lib/render';
+import { bwOf, canvasToBlob, loadElements, renderPage } from '../lib/render';
 
 export interface PreviewInfo {
   pages: number;
@@ -35,7 +35,7 @@ export function PagePreview({ images, settings, scale = 1.35, onInfo }: Props) {
         const els = await loadElements(images);
         const out: string[] = [];
         for (const L of layouts) {
-          const c = renderPage(L, els, { scale, markSize: settings.markSize });
+          const c = renderPage(L, els, { scale, markSize: settings.markSize, bw: bwOf(settings) });
           const u = URL.createObjectURL(await canvasToBlob(c, 'image/jpeg', 0.88));
           made.push(u);
           out.push(u);

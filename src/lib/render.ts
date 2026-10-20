@@ -24,6 +24,73 @@ export async function loadElements(images: ExamImage[]): Promise<Map<string, HTM
   return map;
 }
 
+export interface BwOptions {
+  mode: 'off' | 'gray' | 'contrast';
+  strength: number;
+}
+
+export const bwOf = (s: { bwMode: BwOptions['mode']; bwStrength: number }): BwOptions => ({ mode: s.bwMode, strength: s.bwStrength });
+
+const clampN = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
+
+/** טבלת המרה לגווני אפור: מתיחת טווח (אחוזונים 1%–99%) ואז הגברת ניגודיות סביב האמצע */
+export function bwLut(hist: ArrayLike<number>, total: number, mode: 'gray' | 'contrast', strength: number): Uint8ClampedArray {
+  const lut = new Uint8ClampedArray(256);
+  if (mode === 'gray' || total <= 0) {
+    for (let i = 0; i < 256; i++) lut[i] = i;
+    return lut;
+  }
+  let acc = 0;
+  let lo = 0;
+  let hi = 255;
+  for (let i = 0; i < 256; i++) {
+    acc += hist[i];
+    if (acc >= total * 0.01) {
+      lo = i;
+      break;
+    }
+  }
+  acc = 0;
+  for (let i = 0; i < 256; i++) {
+    acc += hist[i];
+    if (acc >= total * 0.99) {
+      hi = i;
+      break;
+    }
+  }
+  if (hi - lo < 16) {
+    lo = 0;
+    hi = 255;
+  }
+  const k = 1 + (clampN(strength, 0, 100) / 100) * 1.5;
+  for (let i = 0; i < 256; i++) {
+    const t = clampN((i - lo) / (hi - lo), 0, 1);
+    lut[i] = Math.round(clampN(0.5 + (t - 0.5) * k, 0, 1) * 255);
+  }
+  return lut;
+}
+
+/** ממיר קנבס לגווני אפור (ובמצב contrast גם מגביר ניגודיות); הקנבס צריך להיות כבר על רקע לבן */
+export function applyBW(c: HTMLCanvasElement, bw: BwOptions): void {
+  if (bw.mode === 'off') return;
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  const d = img.data;
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < d.length; i += 4) {
+    const l = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+    d[i] = l;
+    hist[l]++;
+  }
+  const lut = bwLut(hist, d.length / 4, bw.mode, bw.strength);
+  for (let i = 0; i < d.length; i += 4) {
+    const v = lut[d[i]];
+    d[i] = d[i + 1] = d[i + 2] = v;
+    d[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
 export function drawCovers(ctx: CanvasRenderingContext2D, covers: Cover[] | undefined, rect: Rect): void {
   if (!covers?.length) return;
   ctx.save();
@@ -179,6 +246,7 @@ export interface RenderOptions {
   scale: number;
   markSize: MarkSize;
   showMarks?: boolean;
+  bw?: BwOptions;
 }
 
 export function renderPage(layout: PageLayout, els: Map<string, HTMLImageElement>, opt: RenderOptions): HTMLCanvasElement {
@@ -213,8 +281,24 @@ export function renderPage(layout: PageLayout, els: Map<string, HTMLImageElement
   for (const p of layout.images) {
     const el = els.get(p.image.id);
     if (el) {
-      ctx.drawImage(el, p.rect.x, p.rect.y, p.rect.w, p.rect.h);
-      drawCovers(ctx, p.image.covers, p.rect);
+      if (opt.bw && opt.bw.mode !== 'off') {
+        const cw = Math.max(1, Math.round(p.rect.w * opt.scale));
+        const ch = Math.max(1, Math.round(p.rect.h * opt.scale));
+        const base = document.createElement('canvas');
+        base.width = cw;
+        base.height = ch;
+        const bctx = base.getContext('2d')!;
+        bctx.fillStyle = '#fff';
+        bctx.fillRect(0, 0, cw, ch);
+        bctx.imageSmoothingQuality = 'high';
+        bctx.drawImage(el, 0, 0, cw, ch);
+        drawCovers(bctx, p.image.covers, { x: 0, y: 0, w: cw, h: ch });
+        applyBW(base, opt.bw);
+        ctx.drawImage(base, p.rect.x, p.rect.y, p.rect.w, p.rect.h);
+      } else {
+        ctx.drawImage(el, p.rect.x, p.rect.y, p.rect.w, p.rect.h);
+        drawCovers(ctx, p.image.covers, p.rect);
+      }
       ctx.strokeStyle = '#bbb';
       ctx.lineWidth = 0.5;
       ctx.strokeRect(p.rect.x, p.rect.y, p.rect.w, p.rect.h);
@@ -315,6 +399,7 @@ export function renderMarkedImage(
   markSize: MarkSize,
   placedWidthPt: number,
   maxSide = 1800,
+  bw?: BwOptions,
 ): HTMLCanvasElement {
   const sc = Math.min(1, maxSide / Math.max(image.width, image.height));
   const w = Math.round(image.width * sc);
@@ -328,6 +413,7 @@ export function renderMarkedImage(
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(el, 0, 0, w, h);
   drawCovers(ctx, image.covers, { x: 0, y: 0, w, h });
+  if (bw) applyBW(c, bw);
   // גודל המספרים בפיקסלים כך שיהיה זהה לגודלם כשהתמונה מוצבת ברוחב placedWidthPt
   const radiusPx = (MARK_RADIUS[markSize] * w) / Math.max(placedWidthPt, 50);
   drawMarks(ctx, image.marks, { x: 0, y: 0, w, h }, { radius: radiusPx });
