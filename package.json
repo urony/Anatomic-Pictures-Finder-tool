@@ -6,6 +6,9 @@
   "description": "כלי חינמי למורים: חיפוש תמונות אנטומיות ממאגרים פתוחים, סימון מספרים והפקת דף מבחן (PDF / Word)",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/build-library.mjs",
+    "predev": "node scripts/build-library.mjs",
+    "build:library": "node scripts/build-library.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",

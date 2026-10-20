@@ -205,3 +205,63 @@ describe('answer table', () => {
     expect(p.table!.columns.reduce((n, c) => n + c.w, 0)).toBeCloseTo(p.table!.rect.w, 3);
   });
 });
+
+import { scoreItem, tokenize, toResult, type LibraryItem } from '../sources/library';
+import { TOPICS, termsForTopic } from './topics';
+
+describe('library matching', () => {
+  const item = (file: string, keywords: string[]): LibraryItem => ({ file, title: file, keywords });
+  it('tokenizes file-style names', () => {
+    expect(tokenize('kidney_nephron-02.png')).toEqual(['kidney', 'nephron', 'png']);
+  });
+  it('matches plurals and prefixes, ignores generic words', () => {
+    const k = item('kidney_nephron.png', ['kidney', 'nephron']);
+    expect(scoreItem(k, tokenize('kidneys'))).toBe(1);
+    expect(scoreItem(k, tokenize('kidney anatomy'))).toBe(1);
+    expect(scoreItem(k, tokenize('heart'))).toBe(0);
+    expect(scoreItem(k, tokenize('nephron kidney'))).toBe(2);
+  });
+  it('library items without license are marked as team uploads and shown by default', () => {
+    const r = toResult(item('a/b c.png', ['b']));
+    expect(r.license.level).toBe('user');
+    expect(r.fullUrl).toContain('library/a/b%20c.png');
+  });
+  it('uses a real license when the credit sheet provides one', () => {
+    const r = toResult({ ...item('x.png', ['x']), license: 'CC BY 4.0', author: 'Jane' });
+    expect(r.license.level).toBe('free');
+    expect(r.author).toBe('Jane');
+  });
+});
+
+describe('topics', () => {
+  const file = terms as unknown as TermsFile;
+  it('female reproductive topic collects glossary terms with the lead first', () => {
+    const t = TOPICS.find((x) => x.label === 'מערכת הרבייה הנקבית')!;
+    const list = termsForTopic(t, file).map((x) => x.en.toLowerCase());
+    expect(list[0]).toBe('female reproductive system');
+    for (const w of ['vagina', 'uterus', 'endometrium', 'ovulation']) expect(list.some((e) => e.includes(w))).toBe(true);
+  });
+  it('every topic has several terms and no duplicates', () => {
+    for (const t of TOPICS) {
+      const list = termsForTopic(t, file).map((x) => x.en.toLowerCase());
+      expect(list.length, t.label).toBeGreaterThanOrEqual(2);
+      expect(new Set(list).size, t.label).toBe(list.length);
+    }
+  });
+  it('thyroid topic excludes parathyroid terms', () => {
+    const t = TOPICS.find((x) => x.label === 'בלוטת התריס')!;
+    const list = termsForTopic(t, file).map((x) => x.en.toLowerCase()).join(' | ');
+    expect(list).toContain('calcitonin');
+    expect(list).not.toContain('chief cells');
+  });
+});
+
+import { plainTerm } from '../sources/commons';
+describe('plainTerm', () => {
+  it('keeps words intact and drops generic suffixes', () => {
+    expect(plainTerm('heart anatomy')).toBe('heart');
+    expect(plainTerm('Adrenal glands')).toBe('Adrenal glands');
+    expect(plainTerm('Loop of Henle')).toBe('Loop of Henle');
+    expect(plainTerm('anatomy')).toBe('anatomy');
+  });
+});

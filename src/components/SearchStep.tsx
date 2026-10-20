@@ -1,39 +1,29 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ExamImage, SearchResult } from '../types';
 import type { Toast } from '../App';
 import { expandQuery, suggest, type TermsFile } from '../lib/terms';
 import { plainTerm, searchCommonsMulti, type KindFilter, type MultiCursor } from '../sources/commons';
 import { searchWellcome } from '../sources/wellcome';
 import { searchOpenverse } from '../sources/openverse';
+import { searchLibrary } from '../sources/library';
+import { TOPICS, termsForTopic, type Topic, type TopicTerm } from '../lib/topics';
 import { importLocalFile, importSearchResult } from '../lib/imageLoad';
 import { isDefaultSafe, LEVEL_LABEL } from '../lib/license';
 
 type ColorFilter = 'all' | 'color' | 'bw';
-type Src = 'commons' | 'wellcome' | 'openverse';
-const SRCS: Src[] = ['commons', 'wellcome', 'openverse'];
+type Src = 'library' | 'commons' | 'wellcome' | 'openverse';
+const SRCS: Src[] = ['library', 'commons', 'wellcome', 'openverse'];
+const TOPIC_BATCH = 6;
 const SRC_LABEL: Record<Src | 'upload', string> = {
+  library: 'מאגר המורים',
   commons: 'Wikimedia Commons',
   wellcome: 'Wellcome Collection',
   openverse: 'Openverse',
   upload: 'העלאה ידנית',
 };
-const SRC_SHORT: Record<Src | 'upload', string> = { commons: 'Commons', wellcome: 'Wellcome', openverse: 'Openverse', upload: 'מקומי' };
+const SRC_SHORT: Record<Src | 'upload', string> = { library: 'מאגר המורים', commons: 'Commons', wellcome: 'Wellcome', openverse: 'Openverse', upload: 'מקומי' };
 
-const QUICK = [
-  'לב',
-  'כליה',
-  'כלי דם',
-  'תאי דם',
-  'מערכת הרבייה הזכרית',
-  'מערכת הרבייה הנקבית',
-  'מערכת אנדוקרינית',
-  'בלוטת התריס',
-  'יותרת התריס',
-  'בלוטות יותרת הכליה',
-  'לבלב',
-  'היפופיזה',
-  'היפותלמוס',
-];
+
 
 interface SourceState {
   status: 'idle' | 'loading' | 'ok' | 'error';
@@ -45,7 +35,7 @@ interface SourceState {
   hasMore?: boolean;
 }
 
-const IDLE: Record<Src, SourceState> = { commons: { status: 'idle' }, wellcome: { status: 'idle' }, openverse: { status: 'idle' } };
+const IDLE: Record<Src, SourceState> = { library: { status: 'idle' }, commons: { status: 'idle' }, wellcome: { status: 'idle' }, openverse: { status: 'idle' } };
 
 interface Props {
   images: ExamImage[];
@@ -61,7 +51,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState<KindFilter>('all');
   const [color, setColor] = useState<ColorFilter>('all');
-  const [enabled, setEnabled] = useState<Record<Src, boolean>>({ commons: true, wellcome: true, openverse: false });
+  const [enabled, setEnabled] = useState<Record<Src, boolean>>({ library: true, commons: true, wellcome: true, openverse: false });
   const [showUnclear, setShowUnclear] = useState(false);
   const [advanced, setAdvanced] = useState(false);
 
@@ -78,6 +68,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
   const fileRef = useRef<HTMLInputElement>(null);
   const searchSeq = useRef(0);
   const termRef = useRef('');
+  const [topic, setTopic] = useState<{ topic: Topic; terms: TopicTerm[]; loaded: number; loading: boolean } | null>(null);
 
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}data/anatomy-terms.json`)
@@ -91,7 +82,11 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
 
   /** מריץ עמוד אחד של מקור נתון; prev = המצב הקודם (להמשך) */
   const fetchSource = useCallback(
-    async (src: Src, term: string, prev: SourceState | null, signal: AbortSignal) => {
+    async (src: Src, term: string, prev: SourceState | null, signal: AbortSignal, extra: string[] = []) => {
+      if (src === 'library') {
+        const r = await searchLibrary([term, ...extra]);
+        return { results: r, state: { status: 'ok', hasMore: false } as SourceState };
+      }
       if (src === 'commons') {
         const r = await searchCommonsMulti(term, kind, prev?.cursor ?? null, signal);
         const hasMore = Object.values(r.cursor.next).some((n) => n !== undefined);
@@ -124,11 +119,13 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
       // אם אין תרגום — מנסים בכל זאת את הטקסט המקורי (לעיתים יש תיאורים בעברית)
       const term = english[0] ?? q;
       termRef.current = term;
+      setTopic(null);
 
       setResults([]);
       setColors({});
       setSearched(true);
       setStates({
+        library: { status: enabled.library ? 'loading' : 'idle' },
         commons: { status: enabled.commons ? 'loading' : 'idle' },
         wellcome: { status: enabled.wellcome ? 'loading' : 'idle' },
         openverse: { status: enabled.openverse ? 'loading' : 'idle' },
@@ -136,7 +133,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
 
       await Promise.all(
         SRCS.filter((s) => enabled[s]).map((src) =>
-          fetchSource(src, term, null, ctrl.signal)
+          fetchSource(src, term, null, ctrl.signal, [q, ...english.slice(1)])
             .then((r) => {
               if (seq !== searchSeq.current) return;
               setResults((prev) => [...prev, ...r.results]);
@@ -166,13 +163,76 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
     }
   };
 
+  /** חיפוש לפי נושא: מחפש את כל מונחי הנושא מהמילון, בקבוצות של כמה מונחים בכל פעם */
+  const loadTopicBatch = useCallback(
+    async (t: Topic, terms: TopicTerm[], from: number, signal: AbortSignal, seq: number) => {
+      const batch = terms.slice(from, from + TOPIC_BATCH);
+      setTopic((cur) => (cur && cur.topic === t ? { ...cur, loading: true } : cur));
+      await Promise.all(
+        batch.map(async (tt, i) => {
+          const idx = from + i;
+          try {
+            let r = await searchCommonsMulti(tt.en, 'illustration', null, signal, 4);
+            if (r.results.length === 0) r = await searchCommonsMulti(tt.en, 'all', null, signal, 4);
+            if (seq !== searchSeq.current) return;
+            const tagged = r.results.slice(0, 8).map((x) => ({ ...x, topic: tt.he, topicIdx: idx }));
+            setResults((prev) => [...prev, ...tagged.filter((x) => !prev.some((y) => y.key === x.key))]);
+          } catch {
+            /* מונח שנכשל לא עוצר את השאר */
+          }
+        }),
+      );
+      if (seq !== searchSeq.current) return;
+      setTopic((cur) => (cur && cur.topic === t ? { ...cur, loaded: from + batch.length, loading: false } : cur));
+    },
+    [],
+  );
+
+  const runTopic = useCallback(
+    async (t: Topic) => {
+      abortRef.current?.abort();
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      const seq = ++searchSeq.current;
+      const topicTerms = termsForTopic(t, terms);
+      setQuery(t.label);
+      setSearched(true);
+      setResults([]);
+      setColors({});
+      setEnglishChoices([]);
+      setActiveEnglish([]);
+      setNoTranslation(false);
+      setStates({ ...IDLE, commons: { status: 'loading' }, library: { status: enabled.library ? 'loading' : 'idle' } });
+      setTopic({ topic: t, terms: topicTerms, loaded: 0, loading: true });
+      if (enabled.library) {
+        searchLibrary(topicTerms.flatMap((x) => [x.en, x.he]))
+          .then((lib) => {
+            if (seq !== searchSeq.current) return;
+            setResults((prev) => [...lib.map((x) => ({ ...x, topic: 'מאגר המורים', topicIdx: -1 })), ...prev]);
+            setStates((s) => ({ ...s, library: { status: 'ok' } }));
+          })
+          .catch(() => setStates((s) => ({ ...s, library: { status: 'ok' } })));
+      }
+      await loadTopicBatch(t, topicTerms, 0, ctrl.signal, seq);
+      if (seq === searchSeq.current) setStates((s) => ({ ...s, commons: { status: 'ok' } }));
+    },
+    [terms, enabled.library, loadTopicBatch],
+  );
+
+  const moreTopicTerms = async () => {
+    if (!topic || topic.loading) return;
+    const ctrl = abortRef.current ?? new AbortController();
+    await loadTopicBatch(topic.topic, topic.terms, topic.loaded, ctrl.signal, searchSeq.current);
+  };
+
   const visible = useMemo(() => {
     // משלבים את המאגרים לסירוגין כדי שלא יוצג מאגר אחד בלבד בראש הרשימה
     const lists = SRCS.map((s) => results.filter((r) => r.source === s));
     const merged: SearchResult[] = [];
     const longest = Math.max(0, ...lists.map((l) => l.length));
     for (let i = 0; i < longest; i++) for (const l of lists) if (l[i]) merged.push(l[i]);
-    return merged.filter((r) => {
+    const ordered = topic ? [...merged].sort((a, b) => (a.topicIdx ?? 0) - (b.topicIdx ?? 0)) : merged;
+    return ordered.filter((r) => {
       if (!showUnclear && !isDefaultSafe(r.license)) return false;
       if (color !== 'all') {
         const c = colors[r.key];
@@ -180,7 +240,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
       }
       return true;
     });
-  }, [results, showUnclear, color, colors]);
+  }, [results, showUnclear, color, colors, topic]);
 
   const hiddenCount = results.length - visible.length;
 
@@ -245,16 +305,9 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
         </form>
 
         <div className="chips">
-          {QUICK.map((q) => (
-            <button
-              key={q}
-              className="chip"
-              onClick={() => {
-                setQuery(q);
-                void runSearch(q);
-              }}
-            >
-              {q}
+          {TOPICS.map((t) => (
+            <button key={t.label} className="chip" onClick={() => void runTopic(t)} title="מחפש את כל המונחים של הנושא מתוך מסמך המונחים">
+              {t.label}
             </button>
           ))}
         </div>
@@ -299,7 +352,12 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
           </div>
         )}
 
-        {searched && englishChoices.length > 0 && (
+        {topic && (
+          <div className="translation">
+            חיפוש לפי נושא: <strong>{topic.topic.label}</strong> — {topic.terms.length} מונחים מתוך מסמך המונחים. מוצגים {Math.min(topic.loaded, topic.terms.length)} מתוכם.
+          </div>
+        )}
+        {searched && !topic && englishChoices.length > 0 && (
           <div className="translation">
             מחפשים במאגרים בשם: <strong dir="ltr">{activeEnglish[0]}</strong>
             {englishChoices.length > 1 && (
@@ -341,14 +399,15 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
         )}
         {!searched && (
           <div className="empty hint">
-            התחילו בחיפוש. התוצאות מגיעות בזמן אמת ממאגרים פתוחים — המורה בוחר מה מתאים מבחינה אנטומית ופדגוגית.
+            התחילו בחיפוש, או לחצו על אחד הנושאים — כל המונחים של הנושא יחופשו. התוצאות מגיעות בזמן אמת ממאגר המורים ומאגרים פתוחים — המורה בוחר מה מתאים מבחינה אנטומית ופדגוגית.
           </div>
         )}
 
         <div className="grid">
-          {visible.map((r) => (
+          {visible.map((r, i) => (
+            <Fragment key={r.key}>
+              {topic && r.topic !== visible[i - 1]?.topic && <h3 className="topic-head">{r.topic}</h3>}
             <ResultCard
-              key={r.key}
               r={r}
               selected={selectedKeys.has(`${r.source}:${r.sourceId}`)}
               busy={adding.has(r.key)}
@@ -356,12 +415,18 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
               onAdd={() => void add(r)}
               onColor={(c) => setColors((m) => (m[r.key] ? m : { ...m, [r.key]: c }))}
             />
+            </Fragment>
           ))}
         </div>
 
         {searched && hiddenCount > 0 && visible.length > 0 && <p className="muted center">{hiddenCount} תוצאות מוסתרות לפי מסנני הרישיון/הצבע.</p>}
 
         <div className="more">
+          {topic && topic.loaded < topic.terms.length && (
+            <button className="btn primary" disabled={topic.loading} onClick={() => void moreTopicTerms()}>
+              {topic.loading ? 'טוען…' : `עוד מונחים מהנושא (${topic.terms.length - topic.loaded} נותרו)`}
+            </button>
+          )}
           {SRCS.map(
             (src) =>
               states[src].hasMore && (

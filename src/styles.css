@@ -187,3 +187,5 @@ main { flex: 1; min-height: 0; overflow: auto; padding: 16px; }
   .lb-card { grid-template-columns: 1fr; overflow: auto; }
 }
 @media print { .topbar, .toast { display: none; } }
+
+.topic-head { grid-column: 1 / -1; margin: 14px 0 0; padding-bottom: 4px; border-bottom: 2px solid var(--brand-soft); color: var(--brand); font-size: 15px; }

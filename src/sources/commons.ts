@@ -156,7 +156,7 @@ export function commonsStrategies(kind: KindFilter): Strategy[] {
 
 /** מנקה מונחי בסיס כמו "heart anatomy" לשם הנקי "heart" לשימוש בקטגוריות */
 export function plainTerm(term: string): string {
-  return term.replace(/(anatomy|structure)/gi, '').replace(/s+/g, ' ').trim() || term;
+  return term.replace(/\b(anatomy|structure)\b/gi, '').replace(/\s+/g, ' ').trim() || term;
 }
 
 export interface MultiCursor {
@@ -171,11 +171,12 @@ export async function searchCommonsMulti(
   kind: KindFilter,
   cursor: MultiCursor | null,
   signal?: AbortSignal,
+  perStrategy = 12,
 ): Promise<{ results: SearchResult[]; cursor: MultiCursor }> {
   const strategies = commonsStrategies(kind).filter((st) => !cursor || cursor.next[st.key] !== undefined);
   const t = plainTerm(term);
   const settled = await Promise.allSettled(
-    strategies.map((st) => searchCommons(st.query(t), st.type, cursor?.next[st.key] ?? 0, signal, 12)),
+    strategies.map((st) => searchCommons(st.query(t), st.type, cursor?.next[st.key] ?? 0, signal, perStrategy)),
   );
   if (settled.every((r) => r.status === 'rejected')) throw new Error('Commons');
   const next: Record<string, number | undefined> = {};

@@ -30,7 +30,7 @@ export function importFromProject(text: string): { images: ExamImage[]; settings
       : [];
     images.push({
       id: String(i.id ?? Math.random().toString(36).slice(2)),
-      source: i.source === 'wellcome' || i.source === 'upload' || i.source === 'openverse' ? i.source : 'commons',
+      source: i.source === 'wellcome' || i.source === 'upload' || i.source === 'openverse' || i.source === 'library' ? i.source : 'commons',
       sourceId: String(i.sourceId ?? ''),
       title: String(i.title ?? ''),
       author: String(i.author ?? ''),

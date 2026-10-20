@@ -38,7 +38,7 @@ export const LEVEL_LABEL: Record<LicenseInfo['level'], string> = {
 
 /** האם תמונה כזו מוצגת כברירת מחדל בחיפוש (מסלול שמרני) */
 export function isDefaultSafe(l: LicenseInfo): boolean {
-  return l.level === 'free' || l.level === 'share';
+  return l.level === 'free' || l.level === 'share' || l.level === 'user';
 }
 
 /** מסיר תגיות HTML מטקסט שמגיע מ-API ומחזיר טקסט רגיל בלבד (בלי רינדור HTML חיצוני). */

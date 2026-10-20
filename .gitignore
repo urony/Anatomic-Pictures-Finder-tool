@@ -3,3 +3,4 @@ dist
 *.local
 .vite
 .claude/settings.local.json
+public/library/index.json

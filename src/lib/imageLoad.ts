@@ -82,6 +82,8 @@ export async function importSearchResult(r: SearchResult, signal?: AbortSignal):
       }
     }
     if (!ok) throw last;
+  } else if (r.source === 'library') {
+    blob = await fetchBlob(r.fullUrl, signal);
   } else if (r.source === 'openverse') {
     // קודם הקובץ המקורי (איכות גבוהה); אם המארח חוסם קריאה מהדפדפן — הגרסה הממוזערת של Openverse
     try {

@@ -9,7 +9,7 @@ export interface LicenseInfo {
   note: string;
 }
 
-export type SourceId = 'commons' | 'wellcome' | 'openverse' | 'upload';
+export type SourceId = 'commons' | 'wellcome' | 'openverse' | 'library' | 'upload';
 
 /** תוצאת חיפוש (לפני שהמורה בחר אותה) */
 export interface SearchResult {
@@ -28,6 +28,9 @@ export interface SearchResult {
   mime?: string;
   license: LicenseInfo;
   credit: string;
+  /** חיפוש לפי נושא: שם המונח שהתוצאה שייכת לו, והסדר שלו */
+  topic?: string;
+  topicIdx?: number;
 }
 
 export interface Mark {
