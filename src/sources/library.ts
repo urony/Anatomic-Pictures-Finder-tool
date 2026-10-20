@@ -34,9 +34,18 @@ export function tokenize(s: string): string[] {
 }
 
 /** רדוקציה גסה לריבוי באנגלית: kidneys -> kidney */
-const stem = (t: string) => {
-  if (hasHebrew(t)) return t.length > 3 && t.startsWith('ה') ? t.slice(1) : t; // הלב ~ לב
-  return t.length > 3 && t.endsWith('s') ? t.slice(0, -1) : t;
+export const stem = (raw: string): string => {
+  const t = raw.toLowerCase();
+  if (hasHebrew(t)) {
+    // הלב ~ לב; שחלות / שחלה ~ שחל; כליות ~ כליה
+    let h = t.length > 3 && t.startsWith('ה') ? t.slice(1) : t;
+    if (h.length > 3 && (h.endsWith('ות') || h.endsWith('ים'))) h = h.slice(0, -2);
+    else if (h.length > 3 && h.endsWith('ה')) h = h.slice(0, -1);
+    return h;
+  }
+  if (t.length > 4 && t.endsWith('ies')) return t.slice(0, -3) + 'y'; // ovaries -> ovary
+  if (t.length > 4 && /(ss|x|z|ch|sh)es$/.test(t)) return t.slice(0, -2);
+  return t.length > 3 && t.endsWith('s') && !t.endsWith('ss') ? t.slice(0, -1) : t;
 };
 
 /** קבצים בשם עברי: מוסיפים להם גם מילות מפתח באנגלית לפי מילון המונחים */

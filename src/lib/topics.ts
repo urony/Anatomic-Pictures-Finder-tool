@@ -11,32 +11,35 @@ export interface Topic {
   lead: { he: string; en: string };
   /** מונחים נוספים שלא מופיעים במסמך המונחים */
   extra?: { he: string; en: string }[];
+  /** מילות מפתח נוספות לחיפוש במאגר המורים בלבד (כל מה ששייך לנושא, גם בעקיפין) */
+  libraryKeywords?: string[];
 }
 
 /** הכפתורים המהירים, לפי סדר הלימוד: לב, כליה, כלי דם, תאי דם, רבייה, אנדוקרינולוגיה */
 export const TOPICS: Topic[] = [
-  { label: 'לב', group: 'קרדיולוגיה', sections: ['מבנה הלב', 'שכבות דופן הלב', 'מערכת ההולכה החשמלית'], lead: { he: 'לב', en: 'heart' } },
-  { label: 'כליה', group: 'נפרולוגיה', lead: { he: 'כליה', en: 'kidney' } },
-  { label: 'כלי דם', group: 'קרדיולוגיה', sections: ['כלי דם', 'מבנה דופן כלי הדם'], lead: { he: 'כלי דם', en: 'blood vessels' } },
+  { label: 'לב', group: 'קרדיולוגיה', sections: ['מבנה הלב', 'שכבות דופן הלב', 'מערכת ההולכה החשמלית'], lead: { he: 'לב', en: 'heart' }, libraryKeywords: ['heart', 'cardiac', 'cardio', 'ventricle', 'atrium', 'valve', 'aorta', 'coronary', 'pericardium', 'myocardium', 'לב'] },
+  { label: 'כליה', group: 'נפרולוגיה', lead: { he: 'כליה', en: 'kidney' }, libraryKeywords: ['kidney', 'renal', 'nephron', 'glomerulus', 'ureter', 'bladder', 'urethra', 'urinary', 'כליה', 'נפרון'] },
+  { label: 'כלי דם', group: 'קרדיולוגיה', sections: ['כלי דם', 'מבנה דופן כלי הדם'], lead: { he: 'כלי דם', en: 'blood vessels' }, libraryKeywords: ['vessel', 'artery', 'vein', 'capillary', 'aorta', 'vena', 'cava', 'carotid', 'circulatory', 'vascular', 'tunica', 'endothelium', 'עורק', 'וריד'] },
   {
     label: 'תאי דם',
     group: 'המטולוגיה ולימפה',
     sections: ['תאי דם לבנים'],
     lead: { he: 'תאי דם', en: 'blood cells' },
+    libraryKeywords: ['blood', 'cell', 'cells', 'erythrocyte', 'leukocyte', 'neutrophil', 'eosinophil', 'basophil', 'monocyte', 'lymphocyte', 'platelet', 'thrombocyte', 'smear', 'דם'],
     extra: [
       { he: 'תאי דם אדומים', en: 'red blood cells erythrocytes' },
       { he: 'טסיות דם', en: 'platelets' },
     ],
   },
-  { label: 'מערכת הרבייה הזכרית', group: 'מערכת הרבייה הזכרית', lead: { he: 'מערכת הרבייה הזכרית', en: 'male reproductive system' } },
-  { label: 'מערכת הרבייה הנקבית', group: 'גינקולוגיה', lead: { he: 'מערכת הרבייה הנקבית', en: 'female reproductive system' } },
-  { label: 'מערכת אנדוקרינית', group: 'אנדוקרינולוגיה', lead: { he: 'מערכת אנדוקרינית', en: 'endocrine system' } },
-  { label: 'היפותלמוס', group: 'אנדוקרינולוגיה', sections: ['היפותלמוס'], lead: { he: 'היפותלמוס', en: 'hypothalamus' } },
-  { label: 'היפופיזה', group: 'אנדוקרינולוגיה', sections: ['היפופיזה'], lead: { he: 'היפופיזה', en: 'pituitary gland' } },
-  { label: 'בלוטת התריס', group: 'אנדוקרינולוגיה', sections: ['בלוטת התריס'], lead: { he: 'בלוטת התריס', en: 'thyroid gland' } },
-  { label: 'יותרת התריס', group: 'אנדוקרינולוגיה', sections: ['יותרת התריס'], lead: { he: 'יותרת התריס', en: 'parathyroid gland' } },
-  { label: 'יותרת הכליה', group: 'אנדוקרינולוגיה', sections: ['יותרת הכליה'], lead: { he: 'יותרת הכליה', en: 'adrenal gland' } },
-  { label: 'לבלב', group: 'אנדוקרינולוגיה', sections: ['בלוטת הלבלב'], lead: { he: 'לבלב', en: 'pancreas' } },
+  { label: 'מערכת הרבייה הזכרית', group: 'מערכת הרבייה הזכרית', lead: { he: 'מערכת הרבייה הזכרית', en: 'male reproductive system' }, libraryKeywords: ['male', 'reproductive', 'testis', 'testes', 'testicle', 'epididymis', 'deferens', 'prostate', 'seminal', 'penis', 'sperm', 'spermatozoa', 'scrotum', 'sertoli', 'leydig', 'אשך', 'ערמונית'] },
+  { label: 'מערכת הרבייה הנקבית', group: 'גינקולוגיה', lead: { he: 'מערכת הרבייה הנקבית', en: 'female reproductive system' }, libraryKeywords: ['female', 'reproductive', 'ovary', 'ovaries', 'ovarian', 'ovum', 'oocyte', 'follicle', 'uterus', 'uterine', 'fallopian', 'tube', 'oviduct', 'cervix', 'vagina', 'vulva', 'endometrium', 'myometrium', 'placenta', 'breast', 'mammary', 'שחלה', 'רחם', 'חצוצרה'] },
+  { label: 'מערכת אנדוקרינית', group: 'אנדוקרינולוגיה', lead: { he: 'מערכת אנדוקרינית', en: 'endocrine system' }, libraryKeywords: ['endocrine', 'gland', 'hormone', 'hypothalamus', 'pituitary', 'hypophysis', 'thyroid', 'parathyroid', 'adrenal', 'suprarenal', 'pancreas', 'islets', 'langerhans', 'insulin', 'glucagon', 'cortisol', 'ovary', 'testis', 'pineal', 'thymus', 'בלוטה', 'הורמון'] },
+  { label: 'היפותלמוס', group: 'אנדוקרינולוגיה', sections: ['היפותלמוס'], lead: { he: 'היפותלמוס', en: 'hypothalamus' }, libraryKeywords: ['hypothalamus', 'pituitary', 'hormone', 'releasing', 'brain'] },
+  { label: 'היפופיזה', group: 'אנדוקרינולוגיה', sections: ['היפופיזה'], lead: { he: 'היפופיזה', en: 'pituitary gland' }, libraryKeywords: ['pituitary', 'hypophysis', 'adenohypophysis', 'neurohypophysis', 'sella', 'turcica', 'hormone', 'oxytocin', 'prolactin', 'vasopressin', 'ADH', 'TSH', 'ACTH', 'FSH'] },
+  { label: 'בלוטת התריס', group: 'אנדוקרינולוגיה', sections: ['בלוטת התריס'], lead: { he: 'בלוטת התריס', en: 'thyroid gland' }, libraryKeywords: ['thyroid', 'thyroxine', 'calcitonin', 'follicle', 'isthmus', 'goiter', 'T3', 'T4', 'תריס'] },
+  { label: 'יותרת התריס', group: 'אנדוקרינולוגיה', sections: ['יותרת התריס'], lead: { he: 'יותרת התריס', en: 'parathyroid gland' }, libraryKeywords: ['parathyroid', 'thyroid', 'chief', 'osteoclast', 'osteoblast', 'calcium', 'PTH'] },
+  { label: 'יותרת הכליה', group: 'אנדוקרינולוגיה', sections: ['יותרת הכליה'], lead: { he: 'יותרת הכליה', en: 'adrenal gland' }, libraryKeywords: ['adrenal', 'suprarenal', 'cortex', 'medulla', 'aldosterone', 'cortisol', 'adrenaline', 'epinephrine', 'catecholamine'] },
+  { label: 'לבלב', group: 'אנדוקרינולוגיה', sections: ['בלוטת הלבלב'], lead: { he: 'לבלב', en: 'pancreas' }, libraryKeywords: ['pancreas', 'pancreatic', 'islets', 'langerhans', 'insulin', 'glucagon', 'acinar', 'alpha', 'beta', 'delta'] },
 ];
 
 export interface TopicTerm {

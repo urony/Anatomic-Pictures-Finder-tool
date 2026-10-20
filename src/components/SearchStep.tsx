@@ -205,7 +205,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
       setStates({ ...IDLE, commons: { status: 'loading' }, library: { status: enabled.library ? 'loading' : 'idle' } });
       setTopic({ topic: t, terms: topicTerms, loaded: 0, loading: true });
       if (enabled.library) {
-        searchLibrary(topicTerms.flatMap((x) => [x.en, x.he]), terms)
+        searchLibrary([...topicTerms.flatMap((x) => [x.en, x.he]), ...(t.libraryKeywords ?? []), t.label], terms)
           .then((lib) => {
             if (seq !== searchSeq.current) return;
             setResults((prev) => [...lib.map((x) => ({ ...x, topic: 'מאגר המורים', topicIdx: -1 })), ...prev]);

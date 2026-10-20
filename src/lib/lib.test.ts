@@ -333,3 +333,42 @@ describe('black & white conversion', () => {
     expect(strong[200]).toBeGreaterThanOrEqual(weak[200]);
   });
 });
+
+import { stem } from '../sources/library';
+describe('library topic matching (regression: Ovary_1.jpg missing under female system)', () => {
+  const file = terms as unknown as TermsFile;
+  const ovary: LibraryItem = { file: 'Ovary_1.jpg', title: 'Ovary 1', keywords: ['ovary'] };
+  it('stems plurals to the same form', () => {
+    expect(stem('Ovaries')).toBe(stem('ovary'));
+    expect(stem('kidneys')).toBe(stem('kidney'));
+    expect(stem('glands')).toBe(stem('gland'));
+    expect(stem('שחלות')).toBe(stem('שחלה'));
+  });
+  it('the glossary terms alone already find the ovary picture under the female system', () => {
+    const f = TOPICS.find((x) => x.label === 'מערכת הרבייה הנקבית')!;
+    expect(scoreItem(ovary, termsForTopic(f, file).flatMap((x) => tokenize(x.en)))).toBeGreaterThan(0);
+  });
+  it('every topic shows library images with a related keyword', () => {
+    const cases: [string, string][] = [
+      ['מערכת הרבייה הנקבית', 'ovary'],
+      ['מערכת הרבייה הנקבית', 'uterus'],
+      ['מערכת הרבייה הזכרית', 'testis'],
+      ['מערכת אנדוקרינית', 'adrenal'],
+      ['מערכת אנדוקרינית', 'pancreas'],
+      ['לבלב', 'islets'],
+      ['לב', 'ventricle'],
+      ['כליה', 'nephron'],
+    ];
+    for (const [label, kw] of cases) {
+      const t = TOPICS.find((x) => x.label === label)!;
+      const phrases = [...termsForTopic(t, file).flatMap((x) => [x.en, x.he]), ...(t.libraryKeywords ?? []), t.label];
+      const item: LibraryItem = { file: kw + '_x.jpg', title: kw, keywords: [kw] };
+      expect(scoreItem(item, phrases.flatMap(tokenize)), label + ' / ' + kw).toBeGreaterThan(0);
+    }
+  });
+  it('does not match unrelated topics', () => {
+    const t = TOPICS.find((x) => x.label === 'לב')!;
+    const phrases = [...termsForTopic(t, file).flatMap((x) => [x.en, x.he]), ...(t.libraryKeywords ?? [])];
+    expect(scoreItem(ovary, phrases.flatMap(tokenize))).toBe(0);
+  });
+});
