@@ -189,3 +189,7 @@ main { flex: 1; min-height: 0; overflow: auto; padding: 16px; }
 @media print { .topbar, .toast { display: none; } }
 
 .topic-head { grid-column: 1 / -1; margin: 14px 0 0; padding-bottom: 4px; border-bottom: 2px solid var(--brand-soft); color: var(--brand); font-size: 15px; }
+
+.search-label { font-size: 13px; font-weight: 600; color: var(--muted); margin: 6px 0 4px; }
+
+.swatch { display: inline-block; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 4px; }

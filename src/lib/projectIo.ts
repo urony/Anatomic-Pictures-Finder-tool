@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, type ExamImage, type Mark, type Project, type Settings } from '../types';
+import { DEFAULT_SETTINGS, type Cover, type ExamImage, type Mark, type Project, type Settings } from '../types';
 
 const clamp01 = (n: unknown, d = 0.5): number => (typeof n === 'number' && isFinite(n) ? Math.min(1, Math.max(0, n)) : d);
 
@@ -28,6 +28,16 @@ export function importFromProject(text: string): { images: ExamImage[]; settings
           line: !!m.line,
         }))
       : [];
+    const covers: Cover[] = Array.isArray(i.covers)
+      ? i.covers.map((c, k) => ({
+          id: typeof c.id === 'string' ? c.id : `c${k}`,
+          x: clamp01(c.x, 0),
+          y: clamp01(c.y, 0),
+          w: clamp01(c.w, 0.05),
+          h: clamp01(c.h, 0.05),
+          color: typeof c.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.color) ? c.color : '#ffffff',
+        }))
+      : [];
     images.push({
       id: String(i.id ?? Math.random().toString(36).slice(2)),
       source: i.source === 'wellcome' || i.source === 'upload' || i.source === 'openverse' || i.source === 'library' ? i.source : 'commons',
@@ -49,6 +59,7 @@ export function importFromProject(text: string): { images: ExamImage[]; settings
       width: Number(i.width) || 1,
       height: Number(i.height) || 1,
       marks,
+      covers,
     });
   }
   return { images, settings: {

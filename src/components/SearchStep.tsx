@@ -227,8 +227,10 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
 
   const visible = useMemo(() => {
     // משלבים את המאגרים לסירוגין כדי שלא יוצג מאגר אחד בלבד בראש הרשימה
-    const lists = SRCS.map((s) => results.filter((r) => r.source === s));
-    const merged: SearchResult[] = [];
+    // כל תמונות מאגר המורים קודם; אחריהן שאר המאגרים לסירוגין
+    const libraryFirst = results.filter((r) => r.source === 'library');
+    const lists = SRCS.filter((s) => s !== 'library').map((s) => results.filter((r) => r.source === s));
+    const merged: SearchResult[] = [...libraryFirst];
     const longest = Math.max(0, ...lists.map((l) => l.length));
     for (let i = 0; i < longest; i++) for (const l of lists) if (l[i]) merged.push(l[i]);
     const ordered = topic ? [...merged].sort((a, b) => (a.topicIdx ?? 0) - (b.topicIdx ?? 0)) : merged;
@@ -243,6 +245,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
   }, [results, showUnclear, color, colors, topic]);
 
   const hiddenCount = results.length - visible.length;
+  const libraryCount = visible.filter((r) => r.source === 'library').length;
 
   const add = async (r: SearchResult) => {
     if (adding.has(r.key) || selectedKeys.has(`${r.source}:${r.sourceId}`)) return;
@@ -278,6 +281,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
   return (
     <div className="search-layout">
       <section className="search-main">
+        <div className="search-label">חיפוש חופשי</div>
         <form
           className="search-bar"
           onSubmit={(e) => {
@@ -290,8 +294,8 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
             list="term-suggestions"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="חפשו איבר או מערכת, למשל: לב, כליה, מוח..."
-            aria-label="חיפוש תמונה"
+            placeholder="חיפוש חופשי: איבר, מבנה או מונח, בעברית או באנגלית (למשל: כליה, spleen)"
+            aria-label="חיפוש חופשי"
             autoFocus
           />
           <datalist id="term-suggestions">
@@ -304,6 +308,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
           </button>
         </form>
 
+        <div className="search-label">או בחרו נושא — יחופשו כל המונחים של הנושא, ומאגר המורים קודם</div>
         <div className="chips">
           {TOPICS.map((t) => (
             <button key={t.label} className="chip" onClick={() => void runTopic(t)} title="מחפש את כל המונחים של הנושא מתוך מסמך המונחים">
@@ -407,6 +412,9 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
           {visible.map((r, i) => (
             <Fragment key={r.key}>
               {topic && r.topic !== visible[i - 1]?.topic && <h3 className="topic-head">{r.topic}</h3>}
+              {!topic && libraryCount > 0 && (i === 0 || (r.source === 'library') !== (visible[i - 1].source === 'library')) && (
+                <h3 className="topic-head">{r.source === 'library' ? `מאגר המורים (${libraryCount})` : 'ממאגרים פתוחים'}</h3>
+              )}
             <ResultCard
               r={r}
               selected={selectedKeys.has(`${r.source}:${r.sourceId}`)}

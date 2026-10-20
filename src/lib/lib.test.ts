@@ -265,3 +265,21 @@ describe('plainTerm', () => {
     expect(plainTerm('anatomy')).toBe('anatomy');
   });
 });
+
+import { medianColor } from './render';
+describe('covers', () => {
+  it('median color ignores outliers such as text pixels', () => {
+    const bg: [number, number, number][] = Array.from({ length: 20 }, () => [240, 230, 210]);
+    expect(medianColor([...bg, [0, 0, 0], [10, 10, 10]])).toBe('#f0e6d2');
+    expect(medianColor([])).toBe('#ffffff');
+  });
+  it('project import keeps valid covers and sanitizes bad ones', () => {
+    const im = { ...img('a', 10, 10), covers: [{ id: 'c1', x: 0.1, y: 0.2, w: 0.3, h: 0.1, color: '#aabbcc' }, { id: 'c2', x: 5, y: -1, w: 0.2, h: 0.2, color: 'url(evil)' }] };
+    const out = importFromProject(JSON.stringify({ format: 'anatomy-exam-builder', version: 1, settings: DEFAULT_SETTINGS, images: [im] }));
+    const c = out.images[0].covers!;
+    expect(c[0].color).toBe('#aabbcc');
+    expect(c[1].x).toBe(1);
+    expect(c[1].y).toBe(0);
+    expect(c[1].color).toBe('#ffffff');
+  });
+});

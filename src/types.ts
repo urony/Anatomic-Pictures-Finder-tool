@@ -46,6 +46,16 @@ export interface Mark {
   line: boolean;
 }
 
+/** מלבן הסתרה (למשל על טקסט שמודפס בתוך התמונה); קואורדינטות יחסיות לתמונה */
+export interface Cover {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color: string;
+}
+
 export interface ExamImage {
   id: string;
   source: SourceId;
@@ -63,6 +73,7 @@ export interface ExamImage {
   width: number;
   height: number;
   marks: Mark[];
+  covers?: Cover[];
 }
 
 export type PaperId = 'A4' | 'Letter';

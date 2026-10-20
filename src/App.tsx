@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DEFAULT_SETTINGS, type ExamImage, type Mark, type Settings } from './types';
+import { DEFAULT_SETTINGS, type Cover, type ExamImage, type Mark, type Settings } from './types';
 import { SearchStep } from './components/SearchStep';
 import { MarkStep } from './components/MarkStep';
 import { LayoutStep } from './components/LayoutStep';
@@ -7,7 +7,7 @@ import { ExportStep } from './components/ExportStep';
 import { exportProject, downloadBlob, importFromProject, safeFilename } from './lib/exporters';
 
 export type Step = 'search' | 'mark' | 'layout' | 'export';
-type Snapshot = Record<string, Mark[]>;
+type Snapshot = Record<string, { marks: Mark[]; covers: Cover[] }>;
 
 const STEPS: { id: Step; label: string }[] = [
   { id: 'search', label: '1. חיפוש ובחירה' },
@@ -39,9 +39,9 @@ export function App() {
     window.setTimeout(() => setToast((cur) => (cur === t ? null : cur)), 6000);
   }, []);
 
-  const snapshot = (): Snapshot => Object.fromEntries(imagesRef.current.map((i) => [i.id, i.marks]));
+  const snapshot = (): Snapshot => Object.fromEntries(imagesRef.current.map((i) => [i.id, { marks: i.marks, covers: i.covers ?? [] }]));
   const applySnapshot = (snap: Snapshot) =>
-    setImages((prev) => prev.map((i) => (snap[i.id] ? { ...i, marks: snap[i.id] } : i)));
+    setImages((prev) => prev.map((i) => (snap[i.id] ? { ...i, marks: snap[i.id].marks, covers: snap[i.id].covers } : i)));
 
   /** נקרא לפני שינוי סימונים שרוצים שיהיה אפשר לבטל */
   const recordHistory = useCallback(() => {
@@ -68,6 +68,10 @@ export function App() {
 
   const setMarks = useCallback((imageId: string, marks: Mark[]) => {
     setImages((prev) => prev.map((i) => (i.id === imageId ? { ...i, marks } : i)));
+  }, []);
+
+  const setCovers = useCallback((imageId: string, covers: Cover[]) => {
+    setImages((prev) => prev.map((i) => (i.id === imageId ? { ...i, covers } : i)));
   }, []);
 
   const addImage = useCallback((img: ExamImage) => setImages((p) => [...p, img]), []);
@@ -244,6 +248,7 @@ export function App() {
             settings={settings}
             setSettings={setSettings}
             setMarks={setMarks}
+            setCovers={setCovers}
             recordHistory={recordHistory}
             undo={undo}
             redo={redo}

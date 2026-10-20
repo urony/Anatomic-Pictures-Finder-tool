@@ -1,4 +1,4 @@
-import type { ExamImage, Mark, MarkSize } from '../types';
+import type { Cover, ExamImage, Mark, MarkSize } from '../types';
 import { FONT, HEADER_FONT, MARK_RADIUS, MARGIN, type PageLayout, type Rect } from './layout';
 import { loadHtmlImage } from './imageLoad';
 
@@ -22,6 +22,63 @@ export async function loadElements(images: ExamImage[]): Promise<Map<string, HTM
   const map = new Map<string, HTMLImageElement>();
   await Promise.all(images.map(async (im) => map.set(im.id, await getImageElement(im))));
   return map;
+}
+
+export function drawCovers(ctx: CanvasRenderingContext2D, covers: Cover[] | undefined, rect: Rect): void {
+  if (!covers?.length) return;
+  ctx.save();
+  for (const c of covers) {
+    ctx.fillStyle = c.color;
+    ctx.fillRect(rect.x + c.x * rect.w, rect.y + c.y * rect.h, c.w * rect.w, c.h * rect.h);
+  }
+  ctx.restore();
+}
+
+const toHex = (n: number) => Math.round(n).toString(16).padStart(2, '0');
+
+/** חציון לכל ערוץ צבע — עמיד לקצוות ולטקסט שנכנס לדגימה */
+export function medianColor(samples: [number, number, number][]): string {
+  if (!samples.length) return '#ffffff';
+  const mid = (ch: number) => {
+    const v = samples.map((p) => p[ch]).sort((a, b) => a - b);
+    return v[Math.floor(v.length / 2)];
+  };
+  return `#${toHex(mid(0))}${toHex(mid(1))}${toHex(mid(2))}`;
+}
+
+/** דוגם את צבע הרקע בטבעת סביב המלבן (x,y,w,h יחסיים), כדי שההסתרה תשתלב ברקע */
+export function sampleBackground(el: HTMLImageElement, r: { x: number; y: number; w: number; h: number }): string {
+  try {
+    const sc = Math.min(1, 1000 / Math.max(el.naturalWidth, el.naturalHeight));
+    const W = Math.max(1, Math.round(el.naturalWidth * sc));
+    const H = Math.max(1, Math.round(el.naturalHeight * sc));
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const ctx = c.getContext('2d', { willReadFrequently: true })!;
+    ctx.drawImage(el, 0, 0, W, H);
+    const x0 = Math.round(r.x * W);
+    const y0 = Math.round(r.y * H);
+    const x1 = Math.round((r.x + r.w) * W);
+    const y1 = Math.round((r.y + r.h) * H);
+    const ring = 4;
+    const samples: [number, number, number][] = [];
+    const grab = (ax: number, ay: number, bx: number, by: number) => {
+      const xa = Math.max(0, Math.min(W - 1, ax));
+      const ya = Math.max(0, Math.min(H - 1, ay));
+      const xb = Math.max(xa + 1, Math.min(W, bx));
+      const yb = Math.max(ya + 1, Math.min(H, by));
+      const d = ctx.getImageData(xa, ya, xb - xa, yb - ya).data;
+      for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 100) samples.push([d[i], d[i + 1], d[i + 2]]);
+    };
+    grab(x0 - ring, y0 - ring, x1 + ring, y0); // למעלה
+    grab(x0 - ring, y1, x1 + ring, y1 + ring); // למטה
+    grab(x0 - ring, y0, x0, y1); // שמאל
+    grab(x1, y0, x1 + ring, y1); // ימין
+    return medianColor(samples);
+  } catch {
+    return '#ffffff';
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -157,6 +214,7 @@ export function renderPage(layout: PageLayout, els: Map<string, HTMLImageElement
     const el = els.get(p.image.id);
     if (el) {
       ctx.drawImage(el, p.rect.x, p.rect.y, p.rect.w, p.rect.h);
+      drawCovers(ctx, p.image.covers, p.rect);
       ctx.strokeStyle = '#bbb';
       ctx.lineWidth = 0.5;
       ctx.strokeRect(p.rect.x, p.rect.y, p.rect.w, p.rect.h);
@@ -269,6 +327,7 @@ export function renderMarkedImage(
   ctx.fillRect(0, 0, w, h);
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(el, 0, 0, w, h);
+  drawCovers(ctx, image.covers, { x: 0, y: 0, w, h });
   // גודל המספרים בפיקסלים כך שיהיה זהה לגודלם כשהתמונה מוצבת ברוחב placedWidthPt
   const radiusPx = (MARK_RADIUS[markSize] * w) / Math.max(placedWidthPt, 50);
   drawMarks(ctx, image.marks, { x: 0, y: 0, w, h }, { radius: radiusPx });
