@@ -47,6 +47,15 @@ export interface TopicTerm {
   en: string;
 }
 
+/**
+ * ביטויים לחיפוש במאגר המורים בלבד: מונח הפתיחה, שם הכפתור ורשימת מילות המפתח של הנושא.
+ * במכוון לא כולל את כל מונחי המילון — מונחים כמו "Thyroid Stimulating Hormone" שייכים להיפופיזה
+ * אבל היו מביאים תמונות בלוטת תריס, ו"Kidney Arteries" היו מציפים את כלי הדם בתמונות כליה.
+ */
+export function libraryPhrases(t: Topic): string[] {
+  return [t.lead.en, t.lead.he, t.label, ...(t.libraryKeywords ?? []), ...(t.extra ?? []).flatMap((x) => [x.en, x.he])];
+}
+
 /** כל מונחי הנושא (מונח פתיחה ראשון, בלי כפילויות) */
 export function termsForTopic(topic: Topic, file: TermsFile | null): TopicTerm[] {
   const out: TopicTerm[] = [topic.lead];

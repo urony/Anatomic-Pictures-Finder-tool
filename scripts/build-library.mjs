@@ -3,6 +3,7 @@
 // פרטי קרדיט (אופציונלי) מתוך public/library/credits.csv: file,author,license,source
 import fs from 'node:fs';
 import path from 'node:path';
+import sharp from 'sharp';
 
 const root = 'public/library';
 const EXT = /\.(png|jpe?g|webp|gif)$/i;
@@ -10,6 +11,7 @@ const EXT = /\.(png|jpe?g|webp|gif)$/i;
 function walk(dir) {
   const out = [];
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name.startsWith('_')) continue; // _web / _thumbs נוצרים אוטומטית
     const p = path.join(dir, e.name);
     if (e.isDirectory()) out.push(...walk(p));
     else if (EXT.test(e.name)) out.push(p);
@@ -61,21 +63,57 @@ if (fs.existsSync(csvPath)) {
 const tokens = (s) => s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 2 && !/^\d+$/.test(t));
 const pretty = (s) => s.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 
-const items = fs.existsSync(root)
-  ? walk(root).sort().map((p) => {
+/** גרסת אתר (WebP עד 2000px) לשימוש במבחן, וממוזערת (JPEG 480px) לתצוגת החיפוש — בלי לגעת במקור */
+async function derive(p, rel) {
+  const base = rel.replace(EXT, '');
+  const webRel = '_web/' + base + '.webp';
+  const thumbRel = '_thumbs/' + base + '.jpg';
+  const webAbs = path.join(root, webRel);
+  const thumbAbs = path.join(root, thumbRel);
+  const srcTime = fs.statSync(p).mtimeMs;
+  const fresh = (f) => fs.existsSync(f) && fs.statSync(f).mtimeMs >= srcTime;
+  const meta = await sharp(p).metadata();
+  const input = () => sharp(p, { animated: false }).rotate().flatten({ background: '#ffffff' });
+  if (!fresh(webAbs)) {
+    fs.mkdirSync(path.dirname(webAbs), { recursive: true });
+    await input().resize({ width: 2000, height: 2000, fit: 'inside', withoutEnlargement: true }).webp({ quality: 88 }).toFile(webAbs);
+  }
+  if (!fresh(thumbAbs)) {
+    fs.mkdirSync(path.dirname(thumbAbs), { recursive: true });
+    await input().resize({ width: 480, height: 480, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 78 }).toFile(thumbAbs);
+  }
+  const w = meta.width ?? 0;
+  const h = meta.height ?? 0;
+  const sc = Math.min(1, 2000 / Math.max(w, h, 1));
+  return { web: webRel, thumb: thumbRel, w: Math.round(w * sc), h: Math.round(h * sc) };
+}
+
+const items = [];
+for (const p of fs.existsSync(root) ? walk(root).sort() : []) {
+  {
+    {
       const rel = path.relative(root, p).split(path.sep).join('/');
       const c = credits.get(rel) || credits.get(path.basename(rel)) || {};
       const folders = rel.split('/').slice(0, -1);
-      return {
+      let derived = {};
+      try {
+        derived = await derive(p, rel);
+      } catch (e) {
+        console.warn('דילוג על קובץ שלא ניתן לעיבוד:', rel, e.message);
+        continue;
+      }
+      items.push({
         file: rel,
+        ...derived,
         title: pretty(path.basename(rel)),
         keywords: [...new Set(tokens(folders.join(' ') + ' ' + path.basename(rel).replace(EXT, '')))],
         ...(c.author ? { author: c.author } : {}),
         ...(c.license ? { license: c.license } : {}),
         ...(c.source ? { source: c.source } : {}),
-      };
-    })
-  : [];
+      });
+    }
+  }
+}
 
 fs.mkdirSync(root, { recursive: true });
 fs.writeFileSync(path.join(root, 'index.json'), JSON.stringify({ items }, null, 1));

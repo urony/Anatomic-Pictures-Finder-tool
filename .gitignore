@@ -4,3 +4,5 @@ dist
 .vite
 .claude/settings.local.json
 public/library/index.json
+public/library/_web/
+public/library/_thumbs/

@@ -31,6 +31,8 @@ npm run build      # בדיקת טיפוסים ובנייה לתיקיית dist
 
 * **שם הקובץ הוא מילות החיפוש** באנגלית: `kidney_nephron.png`, `heart_valves.jpg`. אפשר גם תיקיות משנה (`heart/valves.png`) — שם התיקייה נחשב גם הוא.
 * **קרדיט (אופציונלי)**: שורה בקובץ `public/library/credits.csv` (`file,author,license,source`). אם יש רישיון — הקרדיט מודפס אוטומטית במבחן. בלי שורה, התמונה נכנסת עם הסימון "הועלתה על ידי צוות הכלי".
+* **תמונות כבדות לא מאטות את האתר:** בכל בנייה נוצרות אוטומטית (בעזרת `sharp`) גרסת אתר WebP עד 2000px לשימוש במבחן וממוזערת 480px לתצוגת החיפוש (`public/library/_web`, `_thumbs`; לא נשמרות ב-git). קובצי המקור נשארים ב-GitHub אך אינם נכנסים לאתר המפורסם (`scripts/prune-dist-library.mjs`).
+* **נושאים:** תמונה נכנסת לנושא לפי מילות המפתח שבשם הקובץ/התיקייה, מתוך רשימה מכוונת לכל נושא ב-`src/lib/topics.ts` (`libraryKeywords`). תיקיות ושמות כמו `heart/heart_03.png`, `female_reproductive_system/ovary_01.jpg`, `pituitary_gland/...` עובדים מיידית. כדי שנושא חדש יכלול תמונות, מוסיפים לו מילים ברשימה.
 * האינדקס `index.json` נבנה אוטומטית בכל `npm run build` / `npm run dev` (וגם בפרסום ב-GitHub Actions); אין לערוך אותו ידנית.
 * **העלאה**: בדף המאגר ב-GitHub נכנסים לתיקייה `public/library` → Add file → Upload files, גוררים את התמונות ולוחצים Commit. הפרסום מתעדכן אוטומטית תוך כדקה. מהמחשב: מעתיקים את הקבצים לתיקייה ואז `git add . && git commit -m "add images" && git push`.
 

@@ -207,7 +207,7 @@ describe('answer table', () => {
 });
 
 import { scoreItem, tokenize, toResult, type LibraryItem } from '../sources/library';
-import { TOPICS, termsForTopic } from './topics';
+import { TOPICS, libraryPhrases, termsForTopic } from './topics';
 
 describe('library matching', () => {
   const item = (file: string, keywords: string[]): LibraryItem => ({ file, title: file, keywords });
@@ -344,9 +344,9 @@ describe('library topic matching (regression: Ovary_1.jpg missing under female s
     expect(stem('glands')).toBe(stem('gland'));
     expect(stem('שחלות')).toBe(stem('שחלה'));
   });
-  it('the glossary terms alone already find the ovary picture under the female system', () => {
+  it('the female system topic finds the ovary picture', () => {
     const f = TOPICS.find((x) => x.label === 'מערכת הרבייה הנקבית')!;
-    expect(scoreItem(ovary, termsForTopic(f, file).flatMap((x) => tokenize(x.en)))).toBeGreaterThan(0);
+    expect(scoreItem(ovary, libraryPhrases(f).flatMap(tokenize))).toBeGreaterThan(0);
   });
   it('every topic shows library images with a related keyword', () => {
     const cases: [string, string][] = [
@@ -361,14 +361,29 @@ describe('library topic matching (regression: Ovary_1.jpg missing under female s
     ];
     for (const [label, kw] of cases) {
       const t = TOPICS.find((x) => x.label === label)!;
-      const phrases = [...termsForTopic(t, file).flatMap((x) => [x.en, x.he]), ...(t.libraryKeywords ?? []), t.label];
+      const phrases = libraryPhrases(t);
       const item: LibraryItem = { file: kw + '_x.jpg', title: kw, keywords: [kw] };
       expect(scoreItem(item, phrases.flatMap(tokenize)), label + ' / ' + kw).toBeGreaterThan(0);
     }
   });
   it('does not match unrelated topics', () => {
     const t = TOPICS.find((x) => x.label === 'לב')!;
-    const phrases = [...termsForTopic(t, file).flatMap((x) => [x.en, x.he]), ...(t.libraryKeywords ?? [])];
-    expect(scoreItem(ovary, phrases.flatMap(tokenize))).toBe(0);
+    expect(scoreItem(ovary, libraryPhrases(t).flatMap(tokenize))).toBe(0);
+  });
+  it('topics do not leak into each other (pituitary vs thyroid, male vs endocrine, vessels vs kidney)', () => {
+    const items: Record<string, LibraryItem> = {
+      thyroid: { file: 'thyroid_gland/thyroid_gland_01.jpg', title: 't', keywords: ['thyroid', 'gland'] },
+      kidney: { file: 'kidney/kidney_01.jpg', title: 'k', keywords: ['kidney'] },
+      pituitary: { file: 'pituitary_gland/pituitary_gland_01.jpg', title: 'p', keywords: ['pituitary', 'gland'] },
+      male: { file: 'male_reproductive_system/male_reproductive_system_01.jpg', title: 'm', keywords: ['male', 'reproductive', 'system'] },
+    };
+    const score = (label: string, k: string) => scoreItem(items[k], libraryPhrases(TOPICS.find((x) => x.label === label)!).flatMap(tokenize));
+    expect(score('היפופיזה', 'thyroid')).toBe(0);
+    expect(score('כלי דם', 'kidney')).toBe(0);
+    expect(score('מערכת הרבייה הזכרית', 'pituitary')).toBe(0);
+    expect(score('מערכת הרבייה הזכרית', 'thyroid')).toBe(0);
+    expect(score('מערכת הרבייה הנקבית', 'male')).toBe(0);
+    expect(score('מערכת הרבייה הזכרית', 'male')).toBeGreaterThan(0);
+    expect(score('מערכת אנדוקרינית', 'pituitary')).toBeGreaterThan(0);
   });
 });

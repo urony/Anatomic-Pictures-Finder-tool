@@ -5,6 +5,11 @@ import { expandQuery, hasHebrew, type TermsFile } from '../lib/terms';
 /** פריט באינדקס של מאגר המורים (נוצר ע"י scripts/build-library.mjs) */
 export interface LibraryItem {
   file: string;
+  /** גרסת אתר (WebP) וממוזערת, נוצרות אוטומטית בבנייה */
+  web?: string;
+  thumb?: string;
+  w?: number;
+  h?: number;
   title: string;
   keywords: string[];
   author?: string;
@@ -24,7 +29,8 @@ export function loadLibrary(): Promise<LibraryItem[]> {
   return cache;
 }
 
-const STOP = new Set(['anatomy', 'human', 'diagram', 'illustration', 'structure', 'system', 'the', 'and', 'of']);
+// מילים כלליות מדי: לא מחשיבים אותן כהתאמה (אחרת 'reproductive' יביא תמונות נשיות גם לנושא הזכרי)
+const STOP = new Set(['anatomy', 'human', 'diagram', 'illustration', 'structure', 'system', 'the', 'and', 'of', 'reproductive', 'gland', 'glands', 'cell', 'cells', 'tissue', 'body']);
 
 export function tokenize(s: string): string[] {
   return s
@@ -71,7 +77,9 @@ export function scoreItem(item: LibraryItem, queryTokens: string[]): number {
 }
 
 export function toResult(item: LibraryItem): SearchResult {
-  const url = `${import.meta.env.BASE_URL}library/${item.file.split('/').map(encodeURIComponent).join('/')}`;
+  const href = (rel: string) => `${import.meta.env.BASE_URL}library/${rel.split('/').map(encodeURIComponent).join('/')}`;
+  const url = href(item.web ?? item.file);
+  const thumb = href(item.thumb ?? item.web ?? item.file);
   const license = item.license
     ? classifyLicense(item.license)
     : {
@@ -87,8 +95,10 @@ export function toResult(item: LibraryItem): SearchResult {
     author: item.author || 'מאגר המורים',
     description: '',
     pageUrl: item.source && /^https?:\/\//.test(item.source) ? item.source : '',
-    thumbUrl: url,
+    thumbUrl: thumb,
     fullUrl: url,
+    width: item.w,
+    height: item.h,
     license,
     credit: item.source && !/^https?:\/\//.test(item.source) ? item.source : 'מאגר המורים',
   };
