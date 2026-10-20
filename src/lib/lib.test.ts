@@ -1,0 +1,183 @@
+import { describe, expect, it } from 'vitest';
+import { classifyLicense, safeUrl } from './license';
+import { expandQuery, normalizeHebrew, suggest, type TermsFile } from './terms';
+import { layoutDocument, type TextMeasurer } from './layout';
+import { importFromProject } from './projectIo';
+import { DEFAULT_SETTINGS, type ExamImage, type Mark } from '../types';
+import terms from '../../public/data/anatomy-terms.json';
+
+const measurer: TextMeasurer = { measure: (t) => t.length * 6 };
+
+function img(id: string, w: number, h: number, nums: number[] = []): ExamImage {
+  const marks: Mark[] = nums.map((n) => ({ id: `${id}-${n}`, num: n, tx: 0.5, ty: 0.5, lx: 0.5, ly: 0.5, line: false }));
+  return {
+    id,
+    source: 'commons',
+    sourceId: id,
+    title: id,
+    author: 'x',
+    pageUrl: '',
+    fileUrl: '',
+    license: { name: 'CC BY 4.0', level: 'free', note: '' },
+    credit: 'Wikimedia Commons',
+    fetchedAt: '',
+    notes: [],
+    dataUrl: 'data:image/png;base64,AA==',
+    width: w,
+    height: h,
+    marks,
+  };
+}
+
+describe('license', () => {
+  it.each([
+    ['CC BY-SA 4.0', 'share'],
+    ['CC BY 3.0', 'free'],
+    ['CC0', 'free'],
+    ['Public domain', 'free'],
+    ['Public Domain Mark', 'free'],
+    ['CC BY-NC 4.0', 'restricted'],
+    ['CC BY-ND 2.0', 'restricted'],
+    ['CC BY-NC-SA 3.0', 'restricted'],
+    ['', 'unclear'],
+    ['Fair use', 'unclear'],
+    ['in-copyright', 'unclear'],
+  ])('classifies %s as %s', (name, level) => {
+    expect(classifyLicense(name).level).toBe(level);
+  });
+  it('allows only http(s) urls', () => {
+    expect(safeUrl('javascript:alert(1)')).toBeUndefined();
+    expect(safeUrl('https://example.com/a')).toBe('https://example.com/a');
+  });
+});
+
+describe('terms', () => {
+  const file = terms as unknown as TermsFile;
+  it('normalizes niqqud and quotes', () => {
+    expect(normalizeHebrew('לֵב')).toBe('לב');
+  });
+  it('maps Hebrew organs to English', () => {
+    expect(expandQuery('לב', file).english[0]).toContain('heart');
+    expect(expandQuery('הלב', file).english[0]).toContain('heart');
+    expect(expandQuery('כליות', file).english[0]).toContain('kidney');
+    expect(expandQuery('בלוטת התריס', file).english[0].toLowerCase()).toContain('thyroid');
+    expect(expandQuery('מוח', file).english[0]).toContain('brain');
+  });
+  it('passes English queries through', () => {
+    const e = expandQuery('spleen', file);
+    expect(e.passthrough).toBe(true);
+    expect(e.english).toEqual(['spleen']);
+  });
+  it('reports no match for unknown Hebrew', () => {
+    expect(expandQuery('בלה בלה', file).matched).toBe(false);
+  });
+  it('suggests by prefix', () => {
+    expect(suggest('כל', file).length).toBeGreaterThan(0);
+  });
+});
+
+describe('layout', () => {
+  it('puts one image per page and builds table rows from marks', () => {
+    const pages = layoutDocument([img('a', 800, 600, [1, 2, 3]), img('b', 600, 800, [4, 5])], { ...DEFAULT_SETTINGS, perPage: 1 }, measurer);
+    expect(pages).toHaveLength(2);
+    expect(pages[0].table?.rows.map((r) => r.number)).toEqual(['1', '2', '3']);
+    expect(pages[1].table?.rows.map((r) => r.number)).toEqual(['4', '5']);
+  });
+  it('never distorts images and keeps them inside the page', () => {
+    const imgs = [img('a', 1000, 300), img('b', 300, 1000), img('c', 500, 500), img('d', 900, 600), img('e', 400, 700)];
+    for (const perPage of [1, 2, 3, 4, 6]) {
+      const pages = layoutDocument(imgs, { ...DEFAULT_SETTINGS, perPage }, measurer);
+      for (const p of pages) {
+        for (const pi of p.images) {
+          expect(pi.rect.w / pi.rect.h).toBeCloseTo(pi.image.width / pi.image.height, 3);
+          expect(pi.rect.x).toBeGreaterThanOrEqual(0);
+          expect(pi.rect.x + pi.rect.w).toBeLessThanOrEqual(p.paperW);
+          expect(pi.rect.y + pi.rect.h).toBeLessThanOrEqual(p.paperH);
+        }
+      }
+    }
+  });
+  it('does not overlap images with the table', () => {
+    const pages = layoutDocument([img('a', 800, 1200, [1, 2, 3, 4, 5, 6, 7, 8])], DEFAULT_SETTINGS, measurer);
+    const p = pages[0];
+    const bottom = Math.max(...p.images.map((i) => i.cell.y + i.cell.h));
+    expect(bottom).toBeLessThanOrEqual(p.table!.rect.y);
+  });
+  it('continues a long table on an extra page', () => {
+    const nums = Array.from({ length: 40 }, (_, i) => i + 1);
+    const pages = layoutDocument([img('a', 800, 600, nums)], DEFAULT_SETTINGS, measurer);
+    expect(pages.length).toBeGreaterThan(1);
+    const total = pages.reduce((n, p) => n + (p.table?.rows.length ?? 0), 0);
+    expect(total).toBe(40);
+    expect(pages[1].table?.continued).toBe(true);
+  });
+  it('omits the table when disabled', () => {
+    const pages = layoutDocument([img('a', 800, 600, [1])], { ...DEFAULT_SETTINGS, showTable: false }, measurer);
+    expect(pages[0].table).toBeUndefined();
+  });
+  it('adds a figure column for restart numbering with several images per page', () => {
+    const pages = layoutDocument(
+      [img('a', 800, 600, [1, 2]), img('b', 800, 600, [1, 2])],
+      { ...DEFAULT_SETTINGS, perPage: 2, numbering: 'restart' },
+      measurer,
+    );
+    expect(pages[0].table?.showFigureCol).toBe(true);
+    expect(pages[0].table?.rows).toHaveLength(4);
+  });
+  it('warns about low resolution', () => {
+    const pages = layoutDocument([img('a', 200, 150)], DEFAULT_SETTINGS, measurer);
+    expect(pages[0].warnings.join(' ')).toContain('רזולוציה');
+  });
+});
+
+describe('project file', () => {
+  it('rejects non-project json', () => {
+    expect(() => importFromProject('{"a":1}')).toThrow();
+    expect(() => importFromProject('nope')).toThrow();
+  });
+  it('round-trips and drops unsafe data URLs', () => {
+    const good = img('a', 10, 10, [1]);
+    const bad = { ...img('b', 10, 10), dataUrl: 'javascript:alert(1)' };
+    const text = JSON.stringify({ format: 'anatomy-exam-builder', version: 1, settings: DEFAULT_SETTINGS, images: [good, bad] });
+    const out = importFromProject(text);
+    expect(out.images).toHaveLength(1);
+    expect(out.images[0].marks[0].num).toBe(1);
+  });
+});
+
+describe('terms precision', () => {
+  const file = terms as unknown as TermsFile;
+  it('does not confuse kidney with placenta', () => {
+    const e = expandQuery('כליה', file).english.join(' ');
+    expect(e).toContain('kidney');
+    expect(e).not.toContain('placenta');
+  });
+  it('handles the definite article', () => {
+    expect(expandQuery('הלב', file).english[0]).toContain('heart');
+    expect(expandQuery('הכבד', file).english[0]).toContain('liver');
+  });
+});
+
+describe('glossary-derived terms', () => {
+  const file = terms as unknown as TermsFile;
+  it.each([
+    ['חדר', 'ventricle'],
+    ['אבי העורקים', 'aorta'],
+    ['נימים', 'capillary'],
+    ['פקעית הנפרון', 'glomerulus'],
+    ['לולאת הנלה', 'henle'],
+    ['בלוטת התימוס', 'thymus'],
+    ['איי לנגרהנס', 'langerhans'],
+    ['הלבלב', 'pancreas'],
+    ['רירית הרחם', 'endometrium'],
+    ['צינור מוביל הזרע', 'deferens'],
+    ['קוצב הסינוס', 'sinus'],
+    ['טחול', 'spleen'],
+  ])('finds %s', (q, expected) => {
+    expect(expandQuery(q, file).english.join(' ').toLowerCase()).toContain(expected);
+  });
+  it('keeps every glossary term searchable by its first Hebrew name', () => {
+    const bad = file.terms.filter((t) => /[0590-05FF]/.test(t.he[0])).filter((t) => !expandQuery(t.he[0], file).matched).map((t) => t.he[0]);
+    expect(bad).toEqual([]);
+  });
+});
