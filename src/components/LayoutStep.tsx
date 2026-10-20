@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { ExamImage, Settings } from '../types';
+import { TABLE_INSTR_ALL, TABLE_INSTR_PICK, type ExamImage, type Settings } from '../types';
 import { PagePreview, type PreviewInfo } from './PagePreview';
 
 interface Props {
@@ -17,8 +17,13 @@ export function LayoutStep({ images, settings, setSettings, onReorder, onMove, g
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const set = (patch: Partial<Settings>) => setSettings({ ...settings, ...patch });
 
+  const setMode = (m: Settings['tableMode']) => {
+    const wasDefault = settings.tableInstructions === TABLE_INSTR_ALL || settings.tableInstructions === TABLE_INSTR_PICK;
+    set({ tableMode: m, ...(wasDefault ? { tableInstructions: m === 'pick' ? TABLE_INSTR_PICK : TABLE_INSTR_ALL } : {}) });
+  };
+
   const applyTemplate = (t: Settings['template']) => {
-    if (t === 'exam') set({ template: 'exam', showTable: true, tableRatio: 0.34, perPage: Math.min(settings.perPage, 2) || 1 });
+    if (t === 'exam') set({ template: 'exam', showTable: true, tableRatio: 0.27, perPage: Math.min(settings.perPage, 2) || 1 });
     else if (t === 'images') set({ template: 'images', showTable: false });
     else set({ template: 'custom' });
   };
@@ -62,14 +67,54 @@ export function LayoutStep({ images, settings, setSettings, onReorder, onMove, g
         </label>
         {settings.showTable && (
           <>
-            <label>
-              חלק הטבלה בעמוד: {Math.round(settings.tableRatio * 100)}%
-              <input type="range" min={15} max={60} step={1} value={Math.round(settings.tableRatio * 100)} onChange={(e) => set({ tableRatio: Number(e.target.value) / 100, template: 'custom' })} />
+            <h3>סוג הטבלה</h3>
+            <div className="seg vertical">
+              <button
+                className={settings.tableMode === 'all' ? 'on' : ''}
+                onClick={() => setMode('all')}
+                title="שורה לכל מספר שסומן, והמספרים כבר מודפסים"
+              >
+                שורה לכל מספר (המספרים מודפסים)
+              </button>
+              <button
+                className={settings.tableMode === 'pick' ? 'on' : ''}
+                onClick={() => setMode('pick')}
+                title="שורות ריקות; התלמיד בוחר מספרים וכותב אותם בעצמו"
+              >
+                התלמיד בוחר מספרים (שורות ריקות)
+              </button>
+            </div>
+            {settings.tableMode === 'pick' && (
+              <label>
+                מספר שורות
+                <input type="number" min={1} max={20} value={settings.pickCount} onChange={(e) => set({ pickCount: Math.max(1, Math.min(20, Number(e.target.value) || 1)) })} />
+              </label>
+            )}
+            {settings.tableMode === 'all' && (
+              <label>
+                שורות נוספות בסוף
+                <input type="number" min={0} max={30} value={settings.extraRows} onChange={(e) => set({ extraRows: Math.max(0, Math.min(30, Number(e.target.value) || 0)) })} />
+              </label>
+            )}
+            <div className="small muted">עמודות בטבלה:</div>
+            <label className="check"><input type="checkbox" checked disabled /> מספר, ושם בעברית</label>
+            <label className="check">
+              <input type="checkbox" checked={settings.tableCols.en} onChange={(e) => set({ tableCols: { ...settings.tableCols, en: e.target.checked } })} />
+              שם באנגלית
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={settings.tableCols.fn} onChange={(e) => set({ tableCols: { ...settings.tableCols, fn: e.target.checked } })} />
+              אחד מתפקידי החלק/החומר
             </label>
             <label>
-              שורות נוספות בטבלה
-              <input type="number" min={0} max={30} value={settings.extraRows} onChange={(e) => set({ extraRows: Math.max(0, Math.min(30, Number(e.target.value) || 0)) })} />
+              הנחיה מעל הטבלה
+              <textarea rows={4} value={settings.tableInstructions} onChange={(e) => set({ tableInstructions: e.target.value })} />
             </label>
+            <label>
+              גודל הטבלה בעמוד (עד): {Math.round(settings.tableRatio * 100)}%
+              <input type="range" min={15} max={45} step={1} value={Math.round(settings.tableRatio * 100)} onChange={(e) => set({ tableRatio: Number(e.target.value) / 100, template: 'custom' })} />
+            </label>
+            <p className="small muted">הטבלה מתכווצת לפי מספר השורות; אם יש הרבה שורות היא תגדל עד 45% ואז תמשיך בעמוד נוסף. ב-Word אפשר לשנות כל גודל.</p>
           </>
         )}
 

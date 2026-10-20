@@ -9,7 +9,7 @@ export interface LicenseInfo {
   note: string;
 }
 
-export type SourceId = 'commons' | 'wellcome' | 'upload';
+export type SourceId = 'commons' | 'wellcome' | 'openverse' | 'upload';
 
 /** תוצאת חיפוש (לפני שהמורה בחר אותה) */
 export interface SearchResult {
@@ -75,6 +75,11 @@ export interface Settings {
   /** חלק העמוד שמוקצה לטבלה (0.15–0.6) */
   tableRatio: number;
   extraRows: number;
+  /** all = שורה לכל מספר מסומן (המספרים מודפסים); pick = N שורות ריקות, התלמיד בוחר מספרים */
+  tableMode: 'all' | 'pick';
+  pickCount: number;
+  tableCols: { en: boolean; fn: boolean };
+  tableInstructions: string;
   numbering: 'continuous' | 'restart';
   showCredits: boolean;
   showCaptions: boolean;
@@ -90,6 +95,11 @@ export interface Project {
   images: ExamImage[];
 }
 
+export const TABLE_INSTR_ALL =
+  'העתיקו למחברת את הטבלה הבאה, והשלימו אותה: כתבו בטבלה את שם החלק/החומר המסומן בכל מספר באיור, את שמו באנגלית ואחד מתפקידיו.';
+export const TABLE_INSTR_PICK =
+  'העתיקו למחברת את הטבלה הבאה, והשלימו אותה: בחרו ארבעה מבין החלקים/החומרים הממוספרים באיור, וכתבו בטבלה את המספר של כל חלק/חומר באיור, את שמו בעברית, את שמו באנגלית ואחד מתפקידיו.';
+
 export const DEFAULT_SETTINGS: Settings = {
   title: 'זיהוי מבנים אנטומיים',
   instructions: 'בתמונות שלפניך מסומנים מבנים במספרים. רשמו בטבלה את שם המבנה המסומן בכל מספר.',
@@ -97,8 +107,12 @@ export const DEFAULT_SETTINGS: Settings = {
   landscape: false,
   perPage: 1,
   showTable: true,
-  tableRatio: 0.34,
+  tableRatio: 0.27,
   extraRows: 0,
+  tableMode: 'all',
+  pickCount: 4,
+  tableCols: { en: true, fn: true },
+  tableInstructions: TABLE_INSTR_ALL,
   numbering: 'continuous',
   showCredits: true,
   showCaptions: true,

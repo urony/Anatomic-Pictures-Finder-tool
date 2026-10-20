@@ -181,3 +181,27 @@ describe('glossary-derived terms', () => {
     expect(bad).toEqual([]);
   });
 });
+
+describe('answer table', () => {
+  it('pick mode makes N empty rows and a four-column header', () => {
+    const [p] = layoutDocument([img('a', 800, 600, [1, 2, 3, 4, 5, 6])], { ...DEFAULT_SETTINGS, tableMode: 'pick', pickCount: 4 }, measurer);
+    expect(p.table?.rows).toHaveLength(4);
+    expect(p.table?.rows.every((r) => r.number === '')).toBe(true);
+    expect(p.table?.columns.map((c) => c.key)).toEqual(['num', 'he', 'en', 'fn']);
+  });
+  it('can hide optional columns', () => {
+    const [p] = layoutDocument([img('a', 800, 600, [1])], { ...DEFAULT_SETTINGS, tableCols: { en: false, fn: false } }, measurer);
+    expect(p.table?.columns.map((c) => c.key)).toEqual(['num', 'he']);
+  });
+  it('keeps a 4-row table at about a quarter of the page or less', () => {
+    const [p] = layoutDocument([img('a', 800, 600, [1, 2, 3, 4])], DEFAULT_SETTINGS, measurer);
+    const t = p.table!;
+    const total = t.rect.h + t.instrLines.length * 16;
+    expect(total / p.paperH).toBeLessThan(0.3);
+    expect(t.rect.y + t.rect.h).toBeLessThanOrEqual(p.paperH);
+  });
+  it('column widths add up to the content width', () => {
+    const [p] = layoutDocument([img('a', 800, 600, [1])], DEFAULT_SETTINGS, measurer);
+    expect(p.table!.columns.reduce((n, c) => n + c.w, 0)).toBeCloseTo(p.table!.rect.w, 3);
+  });
+});

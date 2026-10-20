@@ -82,6 +82,18 @@ export async function importSearchResult(r: SearchResult, signal?: AbortSignal):
       }
     }
     if (!ok) throw last;
+  } else if (r.source === 'openverse') {
+    // קודם הקובץ המקורי (איכות גבוהה); אם המארח חוסם קריאה מהדפדפן — הגרסה הממוזערת של Openverse
+    try {
+      if (!r.fullUrl) throw new Error('no url');
+      blob = await fetchBlob(r.fullUrl, signal, 25000);
+      if (!SUPPORTED.test(blob.type)) throw new Error('type');
+      url = r.fullUrl;
+    } catch {
+      blob = await fetchBlob(r.thumbUrl, signal);
+      url = r.thumbUrl;
+      notes.push('נטענה גרסה קטנה של התמונה (איכות הדפסה מוגבלת)');
+    }
   } else {
     blob = await fetchBlob(url, signal);
   }

@@ -57,6 +57,7 @@ export async function searchCommons(
   kind: 'any' | 'drawing' | 'bitmap',
   offset: number,
   signal?: AbortSignal,
+  limit = 24,
 ): Promise<CommonsPage> {
   const filetype = kind === 'drawing' ? 'filetype:drawing' : kind === 'bitmap' ? 'filetype:bitmap' : 'filetype:bitmap|drawing';
   const params = new URLSearchParams({
@@ -66,7 +67,7 @@ export async function searchCommons(
     generator: 'search',
     gsrnamespace: '6',
     gsrsearch: `${query} ${filetype}`,
-    gsrlimit: '24',
+    gsrlimit: String(limit),
     gsroffset: String(offset),
     prop: 'imageinfo',
     iiprop: 'url|size|mime|extmetadata',
@@ -119,4 +120,86 @@ export async function resolveCommonsExportUrl(r: SearchResult, signal?: AbortSig
     width: Math.round(info.width * Math.min(scale, isSvg ? scale : 1)),
     height: Math.round(info.height * Math.min(scale, isSvg ? scale : 1)),
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* חיפוש רב-אסטרטגיות: קטגוריות איורי אנטומיה, NIH BioArt והיסטולוגיה  */
+/* ------------------------------------------------------------------ */
+
+export type KindFilter = 'all' | 'illustration' | 'photo' | 'imaging' | 'micro';
+
+interface Strategy {
+  key: string;
+  query: (term: string) => string;
+  type: 'any' | 'drawing' | 'bitmap';
+}
+
+const S_ILLUS: Strategy = { key: 'illus', query: (t) => `${t} deepcategory:"Anatomical illustrations"`, type: 'any' };
+const S_DIAGRAM: Strategy = { key: 'diagram', query: (t) => `${t} deepcategory:"Anatomy diagrams"`, type: 'any' };
+const S_NIH: Strategy = { key: 'nih', query: (t) => `${t} "NIH BioArt"`, type: 'any' };
+const S_HISTO: Strategy = { key: 'histo', query: (t) => `${t} deepcategory:"Histology"`, type: 'bitmap' };
+
+export function commonsStrategies(kind: KindFilter): Strategy[] {
+  switch (kind) {
+    case 'illustration':
+      return [S_ILLUS, S_DIAGRAM, S_NIH];
+    case 'micro':
+      return [S_HISTO, { key: 'micro', query: (t) => `${t} histology`, type: 'bitmap' }];
+    case 'photo':
+      return [{ key: 'photo', query: (t) => `${t} photograph`, type: 'bitmap' }];
+    case 'imaging':
+      return [{ key: 'imaging', query: (t) => `${t} CT`, type: 'bitmap' }, { key: 'xray', query: (t) => `${t} radiograph`, type: 'bitmap' }];
+    default:
+      return [S_ILLUS, S_DIAGRAM, S_NIH, { key: 'general', query: (t) => `${t} anatomy`, type: 'any' }, S_HISTO];
+  }
+}
+
+/** מנקה מונחי בסיס כמו "heart anatomy" לשם הנקי "heart" לשימוש בקטגוריות */
+export function plainTerm(term: string): string {
+  return term.replace(/(anatomy|structure)/gi, '').replace(/s+/g, ' ').trim() || term;
+}
+
+export interface MultiCursor {
+  /** offset הבא לכל אסטרטגיה; חסר = אין עוד */
+  next: Record<string, number | undefined>;
+  total: number;
+}
+
+/** עמוד תוצאות מכל האסטרטגיות במקביל, משולב לסירוגין וללא כפילויות */
+export async function searchCommonsMulti(
+  term: string,
+  kind: KindFilter,
+  cursor: MultiCursor | null,
+  signal?: AbortSignal,
+): Promise<{ results: SearchResult[]; cursor: MultiCursor }> {
+  const strategies = commonsStrategies(kind).filter((st) => !cursor || cursor.next[st.key] !== undefined);
+  const t = plainTerm(term);
+  const settled = await Promise.allSettled(
+    strategies.map((st) => searchCommons(st.query(t), st.type, cursor?.next[st.key] ?? 0, signal, 12)),
+  );
+  if (settled.every((r) => r.status === 'rejected')) throw new Error('Commons');
+  const next: Record<string, number | undefined> = {};
+  let total = 0;
+  const lists: SearchResult[][] = [];
+  settled.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      lists.push(r.value.results);
+      next[strategies[i].key] = r.value.next;
+      total += r.value.total ?? 0;
+    } else {
+      next[strategies[i].key] = undefined;
+    }
+  });
+  // לפי סדר האסטרטגיות (איורי אנטומיה קודם), ללא כפילויות
+  const merged: SearchResult[] = [];
+  const seen = new Set<string>();
+  for (const l of lists) {
+    for (const x of l) {
+      if (!seen.has(x.key)) {
+        seen.add(x.key);
+        merged.push(x);
+      }
+    }
+  }
+  return { results: merged, cursor: { next, total } };
 }

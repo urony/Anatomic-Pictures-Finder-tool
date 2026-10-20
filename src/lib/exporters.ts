@@ -241,46 +241,37 @@ export async function exportDocx(images: ExamImage[], s: Settings, progress?: Pr
     // טבלת תשובות עריכה
     if (L.table) {
       const t = L.table;
-      const figW = t.showFigureCol ? 900 : 0;
-      const numW = 1100;
       const total = Math.floor(innerWpt * PT_TO_TWIP);
-      const nameW = total - figW - numW;
-      const rowHeight = Math.max(Math.round(t.rowH * PT_TO_TWIP), 380);
-      const hc = (txt: string, w: number, shade = true) =>
+      const widths = t.columns.map((c) => Math.round((c.w / innerWpt) * total));
+      widths[widths.length - 1] += total - widths.reduce((n, x) => n + x, 0);
+      const rowHeight = Math.max(Math.round(t.rowH * PT_TO_TWIP), 460);
+      const cell = (txt: string, w: number, head: boolean) =>
         new TableCell({
           width: { size: w, type: WidthType.DXA },
           borders: LINES,
-          shading: shade ? { fill: 'ECEFF1' } : undefined,
+          shading: head ? { fill: 'E8EEF8' } : undefined,
           verticalAlign: VerticalAlign.CENTER,
-          children: [rtlPara(txt, { bold: true, size: 11, center: true, after: 0 })],
+          children: [rtlPara(txt, { size: 11, center: true, after: 0 })],
         });
+      children.push(new Paragraph({ spacing: { before: 160, after: 40 }, children: [] }));
+      if (t.instrLines.length && s.tableInstructions.trim()) children.push(rtlPara(s.tableInstructions.trim(), { size: 11, after: 100 }));
       const header = new TableRow({
         tableHeader: true,
-        children: [...(t.showFigureCol ? [hc('איור', figW)] : []), hc('מספר', numW), hc('שם המבנה', nameW)],
+        children: t.columns.map((c, i) => cell(c.label, widths[i], true)),
       });
       const rows = t.rows.map(
         (r) =>
           new TableRow({
             cantSplit: true,
             height: { value: rowHeight, rule: HeightRule.ATLEAST },
-            children: [
-              ...(t.showFigureCol ? [hc(r.figure ?? '', figW, false)] : []),
-              hc(r.number, numW, false),
-              new TableCell({
-                width: { size: nameW, type: WidthType.DXA },
-                borders: LINES,
-                verticalAlign: VerticalAlign.CENTER,
-                children: [new Paragraph({ bidirectional: true, children: [] })],
-              }),
-            ],
+            children: t.columns.map((c, i) => cell(c.key === 'num' ? r.number : c.key === 'fig' ? r.figure ?? '' : '', widths[i], false)),
           }),
       );
-      children.push(new Paragraph({ spacing: { before: 160, after: 40 }, children: [] }));
       children.push(
         new Table({
           visuallyRightToLeft: true,
           width: { size: total, type: WidthType.DXA },
-          columnWidths: [...(t.showFigureCol ? [figW] : []), numW, nameW],
+          columnWidths: widths,
           rows: [header, ...rows],
         }),
       );

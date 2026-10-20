@@ -92,14 +92,50 @@ export interface TableRow {
   number: string;
 }
 
+export interface TableColumn {
+  key: 'fig' | 'num' | 'he' | 'en' | 'fn';
+  label: string;
+  /** רוחב בנקודות */
+  w: number;
+  lines: string[];
+}
+
 export interface TableLayout {
+  /** הטבלה עצמה (כותרת + שורות), בלי שורות ההנחיה שמעליה */
   rect: Rect;
+  instrLines: string[];
   headerH: number;
   rowH: number;
   rows: TableRow[];
+  columns: TableColumn[];
   showFigureCol: boolean;
   /** האם זו המשכה של טבלה מעמוד קודם */
   continued: boolean;
+}
+
+const COL_LABEL: Record<TableColumn['key'], string> = {
+  fig: 'איור',
+  num: 'מספר החלק/החומר באיור',
+  he: 'שם החלק/החומר בעברית',
+  en: 'שם החלק/החומר באנגלית',
+  fn: 'אחד מתפקידי החלק/החומר',
+};
+const COL_WEIGHT: Record<TableColumn['key'], number> = { fig: 0.09, num: 0.15, he: 0.25, en: 0.25, fn: 0.36 };
+
+/** בונה את עמודות הטבלה (מימין לשמאל) עם רוחבים ושורות כותרת */
+export function buildColumns(s: Settings, showFig: boolean, totalW: number, m: TextMeasurer): { cols: TableColumn[]; headerH: number } {
+  const keys: TableColumn['key'][] = [];
+  if (showFig) keys.push('fig');
+  keys.push('num', 'he');
+  if (s.tableCols.en) keys.push('en');
+  if (s.tableCols.fn) keys.push('fn');
+  const sum = keys.reduce((n, k) => n + COL_WEIGHT[k], 0);
+  const cols = keys.map((k) => {
+    const w = (COL_WEIGHT[k] / sum) * totalW;
+    return { key: k, label: COL_LABEL[k], w, lines: wrapText(COL_LABEL[k], w - 10, FONT.table, m) };
+  });
+  const maxLines = Math.max(...cols.map((c) => c.lines.length));
+  return { cols, headerH: Math.max(26, maxLines * 15 + 10) };
 }
 
 export interface PageLayout {
@@ -147,6 +183,9 @@ function creditFor(img: ExamImage, index: number): string {
 
 /** מספר השורות המוצגות בטבלה: כל המספרים של התמונות שבעמוד + שורות נוספות */
 export function tableRowsFor(images: { image: ExamImage; index: number }[], s: Settings): TableRow[] {
+  if (s.tableMode === 'pick') {
+    return images.length ? Array.from({ length: Math.max(1, s.pickCount) }, () => ({ number: '' })) : [];
+  }
   const showFig = s.numbering === 'restart' && images.length > 1;
   const rows: TableRow[] = [];
   for (const { image, index } of images) {
@@ -154,7 +193,7 @@ export function tableRowsFor(images: { image: ExamImage; index: number }[], s: S
     for (const m of sorted) rows.push({ number: String(m.num), figure: showFig ? figureLetter(index) : undefined });
   }
   if (s.numbering === 'continuous') rows.sort((a, b) => Number(a.number) - Number(b.number));
-  for (let i = 0; i < s.extraRows; i++) rows.push({ number: '', figure: undefined });
+  if (rows.length || s.extraRows) for (let i = 0; i < s.extraRows; i++) rows.push({ number: '', figure: undefined });
   return rows;
 }
 
@@ -185,9 +224,9 @@ export function fitInto(w: number, h: number, box: Rect): Rect {
 }
 
 const GAP = 12;
-export const MIN_ROW_H = 17;
+export const MIN_ROW_H = 20;
 export const MAX_ROW_H = 30;
-export const TABLE_HEADER_H = 22;
+const MAX_TABLE_GROWTH = 0.45;
 
 /**
  * מחשב את כל העמודים. אותו חישוב משמש לתצוגה מקדימה, PDF, DOCX ו-PNG,
@@ -233,19 +272,28 @@ export function layoutDocument(images: ExamImage[], s: Settings, m: TextMeasurer
     let table: TableLayout | undefined;
     let overflowRows: TableRow[] = [];
     if (s.showTable && rows.length > 0) {
-      const zoneH = Math.max(80, bodyH * s.tableRatio);
-      const capacity = Math.max(1, Math.floor((zoneH - TABLE_HEADER_H) / MIN_ROW_H));
+      const showFig = rows.some((r) => r.figure);
+      const { cols, headerH } = buildColumns(s, showFig, innerW, m);
+      const instrLines = s.tableInstructions.trim() ? wrapText(s.tableInstructions.trim(), innerW, FONT.body, m) : [];
+      const instrH = instrLines.length ? instrLines.length * 16 + 6 : 0;
+      // החלק שהוקצה לטבלה הוא תקרה; אם יש הרבה שורות מאפשרים גידול עד 45% לפני שמפצלים לעמוד נוסף
+      const needed = instrH + headerH + rows.length * MIN_ROW_H;
+      const zoneH = Math.min(bodyH * MAX_TABLE_GROWTH, Math.max(bodyH * s.tableRatio, needed));
+      const capacity = Math.max(1, Math.floor((zoneH - instrH - headerH) / MIN_ROW_H));
       const used = rows.slice(0, capacity);
       overflowRows = rows.slice(capacity);
-      const rowH = Math.min(MAX_ROW_H, (zoneH - TABLE_HEADER_H) / used.length);
-      const tableH = TABLE_HEADER_H + rowH * used.length;
-      imageZoneH = bodyH - zoneH - GAP;
+      const rowH = Math.min(MAX_ROW_H, (zoneH - instrH - headerH) / used.length);
+      const gridH = headerH + rowH * used.length;
+      const total = instrH + gridH;
+      imageZoneH = bodyH - total - GAP;
       table = {
-        rect: { x: MARGIN, y: bodyBottom - zoneH, w: innerW, h: tableH },
-        headerH: TABLE_HEADER_H,
+        rect: { x: MARGIN, y: bodyBottom - total + instrH, w: innerW, h: gridH },
+        instrLines,
+        headerH,
         rowH,
         rows: used,
-        showFigureCol: used.some((r) => r.figure),
+        columns: cols,
+        showFigureCol: showFig,
         continued: false,
       };
       if (overflowRows.length) warnings.push('הטבלה ארוכה מהמקום שהוקצה — היא תמשיך בעמוד נוסף.');
@@ -307,7 +355,9 @@ export function layoutDocument(images: ExamImage[], s: Settings, m: TextMeasurer
     while (rest.length) {
       const top = MARGIN + 28;
       const avail = paperH - MARGIN - top;
-      const cap = Math.max(1, Math.floor((avail - TABLE_HEADER_H) / MAX_ROW_H));
+      const showFig = rest.some((r) => r.figure);
+      const { cols, headerH } = buildColumns(s, showFig, innerW, m);
+      const cap = Math.max(1, Math.floor((avail - headerH) / MAX_ROW_H));
       const used = rest.slice(0, cap);
       rest = rest.slice(cap);
       pages.push({
@@ -321,11 +371,13 @@ export function layoutDocument(images: ExamImage[], s: Settings, m: TextMeasurer
         headerBottom: top,
         images: [],
         table: {
-          rect: { x: MARGIN, y: top, w: innerW, h: TABLE_HEADER_H + used.length * MAX_ROW_H },
-          headerH: TABLE_HEADER_H,
+          rect: { x: MARGIN, y: top, w: innerW, h: headerH + used.length * MAX_ROW_H },
+          instrLines: [],
+          headerH,
           rowH: MAX_ROW_H,
           rows: used,
-          showFigureCol: used.some((r) => r.figure),
+          columns: cols,
+          showFigureCol: showFig,
           continued: true,
         },
         creditLines: [],

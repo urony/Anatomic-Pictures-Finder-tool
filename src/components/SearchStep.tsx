@@ -1,31 +1,51 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ExamImage, SearchResult, SourceId } from '../types';
+import type { ExamImage, SearchResult } from '../types';
 import type { Toast } from '../App';
 import { expandQuery, suggest, type TermsFile } from '../lib/terms';
-import { searchCommons } from '../sources/commons';
+import { plainTerm, searchCommonsMulti, type KindFilter, type MultiCursor } from '../sources/commons';
 import { searchWellcome } from '../sources/wellcome';
+import { searchOpenverse } from '../sources/openverse';
 import { importLocalFile, importSearchResult } from '../lib/imageLoad';
 import { isDefaultSafe, LEVEL_LABEL } from '../lib/license';
 
-type KindFilter = 'all' | 'illustration' | 'photo' | 'imaging' | 'micro';
 type ColorFilter = 'all' | 'color' | 'bw';
-
-const QUICK = ['לב', 'כליה', 'מוח', 'ריאות', 'כבד', 'עין', 'אוזן', 'שלד', 'שרירים', 'בלוטת התריס', 'כלי דם', 'מערכת העיכול'];
-
-const KIND_WORDS: Record<KindFilter, { cirrus: string; type: 'any' | 'drawing' | 'bitmap' }> = {
-  all: { cirrus: '', type: 'any' },
-  illustration: { cirrus: 'illustration', type: 'drawing' },
-  photo: { cirrus: 'photograph', type: 'bitmap' },
-  imaging: { cirrus: 'CT', type: 'bitmap' },
-  micro: { cirrus: 'histology', type: 'bitmap' },
+type Src = 'commons' | 'wellcome' | 'openverse';
+const SRCS: Src[] = ['commons', 'wellcome', 'openverse'];
+const SRC_LABEL: Record<Src | 'upload', string> = {
+  commons: 'Wikimedia Commons',
+  wellcome: 'Wellcome Collection',
+  openverse: 'Openverse',
+  upload: 'העלאה ידנית',
 };
+const SRC_SHORT: Record<Src | 'upload', string> = { commons: 'Commons', wellcome: 'Wellcome', openverse: 'Openverse', upload: 'מקומי' };
+
+const QUICK = [
+  'לב',
+  'כליה',
+  'כלי דם',
+  'תאי דם',
+  'מערכת הרבייה הזכרית',
+  'מערכת הרבייה הנקבית',
+  'מערכת אנדוקרינית',
+  'בלוטת התריס',
+  'יותרת התריס',
+  'בלוטות יותרת הכליה',
+  'לבלב',
+  'היפופיזה',
+  'היפותלמוס',
+];
 
 interface SourceState {
   status: 'idle' | 'loading' | 'ok' | 'error';
   error?: string;
+  /** Wellcome / Openverse: מספר העמוד הבא */
   next?: number;
-  total?: number;
+  /** Commons: מצב ההמשך לכל אסטרטגיית חיפוש */
+  cursor?: MultiCursor;
+  hasMore?: boolean;
 }
+
+const IDLE: Record<Src, SourceState> = { commons: { status: 'idle' }, wellcome: { status: 'idle' }, openverse: { status: 'idle' } };
 
 interface Props {
   images: ExamImage[];
@@ -41,17 +61,12 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState<KindFilter>('all');
   const [color, setColor] = useState<ColorFilter>('all');
-  const [useCommons, setUseCommons] = useState(true);
-  const [useWellcome, setUseWellcome] = useState(true);
+  const [enabled, setEnabled] = useState<Record<Src, boolean>>({ commons: true, wellcome: true, openverse: false });
   const [showUnclear, setShowUnclear] = useState(false);
   const [advanced, setAdvanced] = useState(false);
 
   const [results, setResults] = useState<SearchResult[]>([]);
-  const [states, setStates] = useState<Record<SourceId, SourceState>>({
-    commons: { status: 'idle' },
-    wellcome: { status: 'idle' },
-    upload: { status: 'idle' },
-  });
+  const [states, setStates] = useState<Record<Src, SourceState>>(IDLE);
   const [activeEnglish, setActiveEnglish] = useState<string[]>([]);
   const [englishChoices, setEnglishChoices] = useState<string[]>([]);
   const [searched, setSearched] = useState(false);
@@ -62,6 +77,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
   const abortRef = useRef<AbortController | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const searchSeq = useRef(0);
+  const termRef = useRef('');
 
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}data/anatomy-terms.json`)
@@ -72,6 +88,24 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
 
   const suggestions = useMemo(() => suggest(query, terms), [query, terms]);
   const selectedKeys = useMemo(() => new Set(images.map((i) => `${i.source}:${i.sourceId}`)), [images]);
+
+  /** מריץ עמוד אחד של מקור נתון; prev = המצב הקודם (להמשך) */
+  const fetchSource = useCallback(
+    async (src: Src, term: string, prev: SourceState | null, signal: AbortSignal) => {
+      if (src === 'commons') {
+        const r = await searchCommonsMulti(term, kind, prev?.cursor ?? null, signal);
+        const hasMore = Object.values(r.cursor.next).some((n) => n !== undefined);
+        return { results: r.results, state: { status: 'ok', cursor: r.cursor, hasMore } as SourceState };
+      }
+      if (src === 'wellcome') {
+        const p = await searchWellcome(term, prev?.next ?? 1, !showUnclear, signal);
+        return { results: p.results, state: { status: 'ok', next: p.next, hasMore: p.next !== undefined } as SourceState };
+      }
+      const p = await searchOpenverse(`${plainTerm(term)} anatomy`, prev?.next ?? 1, signal);
+      return { results: p.results, state: { status: 'ok', next: p.next, hasMore: p.next !== undefined } as SourceState };
+    },
+    [kind, showUnclear],
+  );
 
   const runSearch = useCallback(
     async (rawQuery: string, englishOverride?: string[]) => {
@@ -89,70 +123,44 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
       setNoTranslation(!exp.matched && !exp.passthrough && !englishOverride);
       // אם אין תרגום — מנסים בכל זאת את הטקסט המקורי (לעיתים יש תיאורים בעברית)
       const term = english[0] ?? q;
-      const kw = KIND_WORDS[kind];
-      const commonsQuery = [term, kw.cirrus].filter(Boolean).join(' ');
-      const wellcomeQuery = term;
+      termRef.current = term;
 
       setResults([]);
       setColors({});
       setSearched(true);
       setStates({
-        commons: { status: useCommons ? 'loading' : 'idle' },
-        wellcome: { status: useWellcome ? 'loading' : 'idle' },
-        upload: { status: 'idle' },
+        commons: { status: enabled.commons ? 'loading' : 'idle' },
+        wellcome: { status: enabled.wellcome ? 'loading' : 'idle' },
+        openverse: { status: enabled.openverse ? 'loading' : 'idle' },
       });
 
-      const tasks: Promise<void>[] = [];
-      if (useCommons) {
-        tasks.push(
-          searchCommons(commonsQuery, kw.type, 0, ctrl.signal)
-            .then((p) => {
+      await Promise.all(
+        SRCS.filter((s) => enabled[s]).map((src) =>
+          fetchSource(src, term, null, ctrl.signal)
+            .then((r) => {
               if (seq !== searchSeq.current) return;
-              setResults((r) => [...r, ...p.results]);
-              setStates((s) => ({ ...s, commons: { status: 'ok', next: p.next, total: p.total } }));
-            })
-            .catch((e) => {
-              if (ctrl.signal.aborted || seq !== searchSeq.current) return;
-              setStates((s) => ({ ...s, commons: { status: 'error', error: 'לא הצלחנו לגשת ל-Wikimedia Commons כרגע.' + (e?.message ? '' : '') } }));
-            }),
-        );
-      }
-      if (useWellcome) {
-        tasks.push(
-          searchWellcome(wellcomeQuery, 1, !showUnclear, ctrl.signal)
-            .then((p) => {
-              if (seq !== searchSeq.current) return;
-              setResults((r) => [...r, ...p.results]);
-              setStates((s) => ({ ...s, wellcome: { status: 'ok', next: p.next, total: p.total } }));
+              setResults((prev) => [...prev, ...r.results]);
+              setStates((s) => ({ ...s, [src]: r.state }));
             })
             .catch(() => {
               if (ctrl.signal.aborted || seq !== searchSeq.current) return;
-              setStates((s) => ({ ...s, wellcome: { status: 'error', error: 'לא הצלחנו לגשת ל-Wellcome Collection כרגע.' } }));
+              setStates((s) => ({ ...s, [src]: { status: 'error', error: `לא הצלחנו לגשת ל-${SRC_LABEL[src]} כרגע.` } }));
             }),
-        );
-      }
-      await Promise.all(tasks);
+        ),
+      );
     },
-    [terms, kind, useCommons, useWellcome, showUnclear],
+    [terms, enabled, fetchSource],
   );
 
-  const loadMore = async (src: 'commons' | 'wellcome') => {
+  const loadMore = async (src: Src) => {
     const st = states[src];
-    if (st.next === undefined) return;
+    if (!st.hasMore) return;
     const ctrl = abortRef.current ?? new AbortController();
-    const term = activeEnglish[0] ?? query.trim();
     setStates((s) => ({ ...s, [src]: { ...s[src], status: 'loading' } }));
     try {
-      if (src === 'commons') {
-        const kw = KIND_WORDS[kind];
-        const p = await searchCommons([term, kw.cirrus].filter(Boolean).join(' '), kw.type, st.next, ctrl.signal);
-        setResults((r) => [...r, ...p.results.filter((x) => !r.some((y) => y.key === x.key))]);
-        setStates((s) => ({ ...s, commons: { status: 'ok', next: p.next, total: p.total } }));
-      } else {
-        const p = await searchWellcome(term, st.next, !showUnclear, ctrl.signal);
-        setResults((r) => [...r, ...p.results.filter((x) => !r.some((y) => y.key === x.key))]);
-        setStates((s) => ({ ...s, wellcome: { status: 'ok', next: p.next, total: p.total } }));
-      }
+      const r = await fetchSource(src, termRef.current || activeEnglish[0] || query.trim(), st, ctrl.signal);
+      setResults((prev) => [...prev, ...r.results.filter((x) => !prev.some((y) => y.key === x.key))]);
+      setStates((s) => ({ ...s, [src]: r.state }));
     } catch {
       setStates((s) => ({ ...s, [src]: { ...s[src], status: 'error', error: 'טעינת תוצאות נוספות נכשלה.' } }));
     }
@@ -160,14 +168,10 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
 
   const visible = useMemo(() => {
     // משלבים את המאגרים לסירוגין כדי שלא יוצג מאגר אחד בלבד בראש הרשימה
-    const bySrc = (s: SourceId) => results.filter((r) => r.source === s);
-    const a = bySrc('commons');
-    const b = bySrc('wellcome');
+    const lists = SRCS.map((s) => results.filter((r) => r.source === s));
     const merged: SearchResult[] = [];
-    for (let i = 0; i < Math.max(a.length, b.length); i++) {
-      if (a[i]) merged.push(a[i]);
-      if (b[i]) merged.push(b[i]);
-    }
+    const longest = Math.max(0, ...lists.map((l) => l.length));
+    for (let i = 0; i < longest; i++) for (const l of lists) if (l[i]) merged.push(l[i]);
     return merged.filter((r) => {
       if (!showUnclear && !isDefaultSafe(r.license)) return false;
       if (color !== 'all') {
@@ -208,7 +212,8 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
     }
   };
 
-  const anyLoading = states.commons.status === 'loading' || states.wellcome.status === 'loading';
+  const anyLoading = SRCS.some((s) => states[s].status === 'loading');
+  const anyError = SRCS.some((s) => states[s].status === 'error');
 
   return (
     <div className="search-layout">
@@ -284,8 +289,11 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
         {advanced && (
           <div className="advanced">
             <strong>מאגרים:</strong>
-            <label className="check"><input type="checkbox" checked={useCommons} onChange={(e) => setUseCommons(e.target.checked)} /> Wikimedia Commons</label>
-            <label className="check"><input type="checkbox" checked={useWellcome} onChange={(e) => setUseWellcome(e.target.checked)} /> Wellcome Collection</label>
+            {SRCS.map((s) => (
+              <label key={s} className="check">
+                <input type="checkbox" checked={enabled[s]} onChange={(e) => setEnabled((m) => ({ ...m, [s]: e.target.checked }))} /> {SRC_LABEL[s]}{s === 'openverse' ? ' (ניסיוני, לעיתים איטי)' : ''}
+              </label>
+            ))}
             <label className="check"><input type="checkbox" checked={showUnclear} onChange={(e) => setShowUnclear(e.target.checked)} /> הצג גם תמונות עם רישיון לא ברור או מוגבל</label>
             <span className="muted">Servier Medical Art: לא זמין לחיפוש חי בגרסה זו.</span>
           </div>
@@ -314,18 +322,18 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
           </div>
         )}
 
-        {(['commons', 'wellcome'] as const).map((src) =>
+        {SRCS.map((src) =>
           states[src].status === 'error' ? (
             <div key={src} className="error-box">
               {states[src].error}{' '}
-              {(['commons', 'wellcome'] as const).some((o) => o !== src && states[o].status === 'ok')
+              {SRCS.some((o) => o !== src && states[o].status === 'ok')
                 ? 'שאר המאגרים ממשיכים לעבוד.'
                 : 'בדקו את החיבור לאינטרנט ונסו שוב בעוד רגע.'}
             </div>
           ) : null,
         )}
 
-        {searched && !anyLoading && visible.length === 0 && !(states.commons.status === 'error' || states.wellcome.status === 'error') && (
+        {searched && !anyLoading && visible.length === 0 && !anyError && (
           <div className="empty">
             לא נמצאו תוצאות מתאימות.
             {hiddenCount > 0 && ' (חלק מהתוצאות הוסתרו בגלל רישיון או מסנן צבע — אפשר להרחיב בהגדרות המתקדמות.)'}
@@ -354,11 +362,11 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
         {searched && hiddenCount > 0 && visible.length > 0 && <p className="muted center">{hiddenCount} תוצאות מוסתרות לפי מסנני הרישיון/הצבע.</p>}
 
         <div className="more">
-          {(['commons', 'wellcome'] as const).map(
+          {SRCS.map(
             (src) =>
-              states[src].next !== undefined && (
+              states[src].hasMore && (
                 <button key={src} className="btn" disabled={states[src].status === 'loading'} onClick={() => void loadMore(src)}>
-                  {states[src].status === 'loading' ? 'טוען…' : `עוד תוצאות מ-${src === 'commons' ? 'Wikimedia Commons' : 'Wellcome'}`}
+                  {states[src].status === 'loading' ? 'טוען…' : `עוד תוצאות מ-${SRC_LABEL[src]}`}
                 </button>
               ),
           )}
@@ -445,7 +453,7 @@ function ResultCard({
       <div className="card-body">
         <div className="card-title" title={r.title}>{r.title}</div>
         <div className="badges">
-          <span className="src">{r.source === 'commons' ? 'Commons' : 'Wellcome'}</span>
+          <span className="src">{SRC_SHORT[r.source]}</span>
           <span className={licenseClass(r.license.level)} title={r.license.note}>
             {r.license.name}
           </span>
@@ -492,7 +500,12 @@ function Lightbox({ r, selected, busy, onClose, onAdd }: { r: SearchResult; sele
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
-  const big = r.source === 'commons' ? r.thumbUrl.replace(/\/500px-/, '/1280px-') : r.thumbUrl.replace('/full/400,/', '/full/1000,/');
+  const big =
+    r.source === 'commons'
+      ? r.thumbUrl.replace(/\/500px-/, '/1280px-')
+      : r.source === 'wellcome'
+        ? r.thumbUrl.replace('/full/400,/', '/full/1000,/')
+        : r.thumbUrl;
   const [src, setSrc] = useState(big);
   return (
     <div className="lightbox" role="dialog" aria-modal="true" onClick={onClose}>
@@ -505,7 +518,7 @@ function Lightbox({ r, selected, busy, onClose, onAdd }: { r: SearchResult; sele
           <h3>{r.title}</h3>
           <dl>
             <dt>מקור</dt>
-            <dd>{r.source === 'commons' ? 'Wikimedia Commons' : 'Wellcome Collection'}</dd>
+            <dd>{SRC_LABEL[r.source]}{r.credit && r.source === 'openverse' ? ` (${r.credit})` : ''}</dd>
             <dt>יוצר</dt>
             <dd>{r.author}</dd>
             <dt>רישיון</dt>

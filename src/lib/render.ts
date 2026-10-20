@@ -192,47 +192,61 @@ export function renderPage(layout: PageLayout, els: Map<string, HTMLImageElement
 function drawTable(ctx: CanvasRenderingContext2D, layout: PageLayout) {
   const t = layout.table!;
   const { x, y, w } = t.rect;
-  const figW = t.showFigureCol ? 52 : 0;
-  const numW = 62;
-  const nameW = w - figW - numW;
-  // עמודות מימין לשמאל: איור | מספר | שם המבנה
-  const colFigRight = x + w;
-  const colNumRight = colFigRight - figW;
-  const colNameRight = colNumRight - numW;
+  const right = x + w;
 
+  // הנחיה מעל הטבלה
+  if (t.instrLines.length) {
+    let iy = y - t.instrLines.length * 16 - 6 + 12;
+    for (const line of t.instrLines) {
+      rtlText(ctx, line, right, iy, 'right', FONT.body);
+      iy += 16;
+    }
+  }
+
+  const gridH = t.headerH + t.rowH * t.rows.length;
   ctx.save();
-  ctx.fillStyle = '#eceff1';
+  ctx.fillStyle = '#e8eef8';
   ctx.fillRect(x, y, w, t.headerH);
-  ctx.strokeStyle = '#222';
+  ctx.strokeStyle = '#111';
   ctx.lineWidth = 0.9;
-  ctx.strokeRect(x, y, w, t.headerH + t.rowH * t.rows.length);
-  // קווים אופקיים
+  ctx.strokeRect(x, y, w, gridH);
   for (let i = 0; i <= t.rows.length; i++) {
     const yy = y + t.headerH + i * t.rowH;
     ctx.beginPath();
     ctx.moveTo(x, yy);
-    ctx.lineTo(x + w, yy);
+    ctx.lineTo(right, yy);
     ctx.stroke();
   }
-  // קווים אנכיים
-  const vlines = [colNumRight, colNameRight];
-  if (!t.showFigureCol) vlines.shift();
-  for (const vx of vlines) {
-    ctx.beginPath();
-    ctx.moveTo(vx, y);
-    ctx.lineTo(vx, y + t.headerH + t.rowH * t.rows.length);
-    ctx.stroke();
+  // עמודות מימין לשמאל
+  let cx = right;
+  const spans: { key: string; r: number; l: number }[] = [];
+  for (const c of t.columns) {
+    spans.push({ key: c.key, r: cx, l: cx - c.w });
+    cx -= c.w;
+    if (cx > x + 1) {
+      ctx.beginPath();
+      ctx.moveTo(cx, y);
+      ctx.lineTo(cx, y + gridH);
+      ctx.stroke();
+    }
   }
   ctx.restore();
 
-  const headY = y + t.headerH / 2 + 4.3;
-  if (t.showFigureCol) rtlText(ctx, 'איור', colFigRight - figW / 2, headY, 'center', FONT.tableHead);
-  rtlText(ctx, 'מספר', colNumRight - numW / 2, headY, 'center', FONT.tableHead);
-  rtlText(ctx, 'שם המבנה', x + nameW / 2, headY, 'center', FONT.tableHead);
+  t.columns.forEach((c, i) => {
+    const sp = spans[i];
+    const mid = (sp.r + sp.l) / 2;
+    const lineH = 15;
+    const startY = y + (t.headerH - c.lines.length * lineH) / 2 + 11;
+    c.lines.forEach((line, k) => rtlText(ctx, line, mid, startY + k * lineH, 'center', FONT.table));
+  });
   t.rows.forEach((r, i) => {
     const cy = y + t.headerH + i * t.rowH + t.rowH / 2 + 4.3;
-    if (t.showFigureCol && r.figure) rtlText(ctx, r.figure, colFigRight - figW / 2, cy, 'center', FONT.table);
-    if (r.number) rtlText(ctx, r.number, colNumRight - numW / 2, cy, 'center', FONT.table);
+    t.columns.forEach((c, k) => {
+      const sp = spans[k];
+      const mid = (sp.r + sp.l) / 2;
+      if (c.key === 'fig' && r.figure) rtlText(ctx, r.figure, mid, cy, 'center', FONT.table);
+      if (c.key === 'num' && r.number) rtlText(ctx, r.number, mid, cy, 'center', FONT.table);
+    });
   });
 }
 
