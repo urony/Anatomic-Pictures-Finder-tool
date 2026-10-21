@@ -169,6 +169,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
       const batch = terms.slice(from, from + TOPIC_BATCH);
       setTopic((cur) => (cur && cur.topic === t ? { ...cur, loading: true } : cur));
       let failed = 0;
+      let added = 0;
       await Promise.all(
         batch.map(async (tt, i) => {
           const idx = from + i;
@@ -177,6 +178,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
             if (r.results.length === 0) r = await searchCommonsMulti(tt.en, 'all', null, signal, 4, ['general']);
             if (seq !== searchSeq.current) return;
             const tagged = r.results.slice(0, 8).map((x) => ({ ...x, topic: tt.he, topicIdx: idx }));
+            added += tagged.length;
             setResults((prev) => [...prev, ...tagged.filter((x) => !prev.some((y) => y.key === x.key))]);
           } catch {
             failed++; // מונח שנכשל לא עוצר את השאר
@@ -189,8 +191,9 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
           commons: { status: 'error', error: 'Wikimedia Commons מגביל זמנית את מספר הבקשות (או שאין חיבור). חכו דקה ולחצו שוב על הנושא.' },
         }));
       }
-      if (seq !== searchSeq.current) return;
+      if (seq !== searchSeq.current) return { added, failed, total: batch.length };
       setTopic((cur) => (cur && cur.topic === t ? { ...cur, loaded: from + batch.length, loading: false } : cur));
+      return { added, failed, total: batch.length };
     },
     [],
   );
@@ -226,10 +229,23 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
     [terms, enabled.library, loadTopicBatch],
   );
 
+  // אם הטעינה נמשכת זמן רב — מסבירים למורה מה קורה במקום להשאיר מסך ריק
+  const [slow, setSlow] = useState(false);
+  const topicLoading = !!topic?.loading;
+  useEffect(() => {
+    setSlow(false);
+    if (!topicLoading) return;
+    const t = window.setTimeout(() => setSlow(true), 10000);
+    return () => window.clearTimeout(t);
+  }, [topicLoading]);
+
   const moreTopicTerms = async () => {
     if (!topic || topic.loading) return;
     const ctrl = abortRef.current ?? new AbortController();
-    await loadTopicBatch(topic.topic, topic.terms, topic.loaded, ctrl.signal, searchSeq.current);
+    const r = await loadTopicBatch(topic.topic, topic.terms, topic.loaded, ctrl.signal, searchSeq.current);
+    if (r.total > 0 && r.failed < r.total && r.added === 0) {
+      notify({ kind: 'info', text: 'לא נמצאו תמונות חדשות למונחים האלה. אפשר ללחוץ שוב כדי לנסות את הבאים.' });
+    }
   };
 
   const visible = useMemo(() => {
@@ -367,6 +383,12 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
         {topic && (
           <div className="translation">
             חיפוש לפי נושא: <strong>{topic.topic.label}</strong> — {topic.terms.length} מונחים מתוך מסמך המונחים. מוצגים {Math.min(topic.loaded, topic.terms.length)} מתוכם.
+          </div>
+        )}
+        {topic?.loading && (
+          <div className="loading-note" role="status">
+            <span className="spinner" aria-hidden /> טוען תמונות לפי מונחי הנושא ({Math.min(topic.loaded + TOPIC_BATCH, topic.terms.length)} מתוך {topic.terms.length}). התוצאות מופיעות בהדרגה — אפשר לגלול ולחכות כמה שניות.
+            {slow && <div>הטעינה איטית: Wikimedia מגביל את קצב הבקשות. התוצאות עדיין יגיעו; אפשר לחזור בעוד רגע, או לעבוד בינתיים עם תמונות מאגר המורים.</div>}
           </div>
         )}
         {searched && !topic && englishChoices.length > 0 && (

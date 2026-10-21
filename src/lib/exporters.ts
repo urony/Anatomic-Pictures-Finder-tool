@@ -144,7 +144,8 @@ function rtlPara(text: string, opts: { bold?: boolean; size?: number; center?: b
   });
 }
 
-const NO_BORDER = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+// בכוונה לבן דק ולא NONE: Word מציג קווי עזר מנוקדים (לא מודפסים) סביב טבלה בלי גבולות בכלל
+const NO_BORDER = { style: BorderStyle.SINGLE, size: 2, color: 'FFFFFF' };
 const NO_BORDERS = { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER };
 const LINE = { style: BorderStyle.SINGLE, size: 6, color: '222222' };
 const LINES = { top: LINE, bottom: LINE, left: LINE, right: LINE };
