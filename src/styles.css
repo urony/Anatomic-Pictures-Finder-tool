@@ -193,3 +193,5 @@ main { flex: 1; min-height: 0; overflow: auto; padding: 16px; }
 .search-label { font-size: 13px; font-weight: 600; color: var(--muted); margin: 6px 0 4px; }
 
 .swatch { display: inline-block; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 4px; }
+
+.credit-line { margin: 22px 0 0; font-size: 13px; color: var(--muted); letter-spacing: 0.3px; }

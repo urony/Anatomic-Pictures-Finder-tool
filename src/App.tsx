@@ -188,6 +188,7 @@ export function App() {
             <li>סדרו בעמוד והורידו PDF / Word</li>
           </ol>
           {narrow && <p className="warn-box">הכלי מיועד לשימוש במחשב. במסך קטן העבודה תהיה פחות נוחה.</p>}
+          <p className="credit-line">פותח על ידי אורי העליון</p>
         </div>
       </div>
     );

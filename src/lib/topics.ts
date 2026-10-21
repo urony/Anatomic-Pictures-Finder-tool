@@ -19,7 +19,7 @@ export interface Topic {
 export const TOPICS: Topic[] = [
   { label: 'לב', group: 'קרדיולוגיה', sections: ['מבנה הלב', 'שכבות דופן הלב', 'מערכת ההולכה החשמלית'], lead: { he: 'לב', en: 'heart' }, libraryKeywords: ['heart', 'cardiac', 'cardio', 'ventricle', 'atrium', 'valve', 'aorta', 'coronary', 'pericardium', 'myocardium', 'לב'] },
   { label: 'כליה', group: 'נפרולוגיה', lead: { he: 'כליה', en: 'kidney' }, libraryKeywords: ['kidney', 'renal', 'nephron', 'glomerulus', 'ureter', 'bladder', 'urethra', 'urinary', 'כליה', 'נפרון'] },
-  { label: 'כלי דם', group: 'קרדיולוגיה', sections: ['כלי דם', 'מבנה דופן כלי הדם'], lead: { he: 'כלי דם', en: 'blood vessels' }, libraryKeywords: ['vessel', 'artery', 'vein', 'capillary', 'aorta', 'vena', 'cava', 'carotid', 'circulatory', 'vascular', 'tunica', 'endothelium', 'עורק', 'וריד'] },
+  { label: 'כלי דם', group: 'קרדיולוגיה', sections: ['כלי דם', 'מבנה דופן כלי הדם'], lead: { he: 'כלי דם', en: 'blood vessels' }, libraryKeywords: ['vessels', 'capillaries', 'vessel', 'artery', 'vein', 'capillary', 'aorta', 'vena', 'cava', 'carotid', 'circulatory', 'vascular', 'tunica', 'endothelium', 'עורק', 'וריד'] },
   {
     label: 'תאי דם',
     group: 'המטולוגיה ולימפה',
@@ -30,6 +30,13 @@ export const TOPICS: Topic[] = [
       { he: 'תאי דם אדומים', en: 'red blood cells erythrocytes' },
       { he: 'טסיות דם', en: 'platelets' },
     ],
+  },
+  {
+    label: 'מערכת הלימפה',
+    group: 'המטולוגיה ולימפה',
+    sections: ['מערכת הלימפה', 'תאים ותהליכים'],
+    lead: { he: 'מערכת הלימפה', en: 'lymphatic system' },
+    libraryKeywords: ['lymph', 'lymphatic', 'lymphoid', 'node', 'spleen', 'thymus', 'tonsil', 'adenoid', 'macrophage', 'antigen', 'לימפה'],
   },
   { label: 'מערכת הרבייה הזכרית', group: 'מערכת הרבייה הזכרית', lead: { he: 'מערכת הרבייה הזכרית', en: 'male reproductive system' }, libraryKeywords: ['male', 'reproductive', 'testis', 'testes', 'testicle', 'epididymis', 'deferens', 'prostate', 'seminal', 'penis', 'sperm', 'spermatozoa', 'scrotum', 'sertoli', 'leydig', 'אשך', 'ערמונית'] },
   { label: 'מערכת הרבייה הנקבית', group: 'גינקולוגיה', lead: { he: 'מערכת הרבייה הנקבית', en: 'female reproductive system' }, libraryKeywords: ['female', 'reproductive', 'ovary', 'ovaries', 'ovarian', 'ovum', 'oocyte', 'follicle', 'uterus', 'uterine', 'fallopian', 'tube', 'oviduct', 'cervix', 'vagina', 'vulva', 'endometrium', 'myometrium', 'placenta', 'breast', 'mammary', 'שחלה', 'רחם', 'חצוצרה'] },
@@ -53,7 +60,8 @@ export interface TopicTerm {
  * אבל היו מביאים תמונות בלוטת תריס, ו"Kidney Arteries" היו מציפים את כלי הדם בתמונות כליה.
  */
 export function libraryPhrases(t: Topic): string[] {
-  return [t.lead.en, t.lead.he, t.label, ...(t.libraryKeywords ?? []), ...(t.extra ?? []).flatMap((x) => [x.en, x.he])];
+  // בלי lead.en: "blood vessels" היה מביא תמונות תאי דם לנושא כלי הדם דרך המילה blood
+  return [t.label, ...(t.libraryKeywords ?? []), ...(t.extra ?? []).flatMap((x) => [x.en, x.he])];
 }
 
 /** כל מונחי הנושא (מונח פתיחה ראשון, בלי כפילויות) */

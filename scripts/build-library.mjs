@@ -115,6 +115,22 @@ for (const p of fs.existsSync(root) ? walk(root).sort() : []) {
   }
 }
 
+// מנקים גרסאות נגזרות של תמונות שנמחקו או שונו להן שם
+const keep = new Set(items.flatMap((i) => [path.join(root, i.web), path.join(root, i.thumb)].map((x) => path.resolve(x))));
+for (const d of ['_web', '_thumbs']) {
+  const dirAbs = path.join(root, d);
+  if (!fs.existsSync(dirAbs)) continue;
+  (function clean(dir) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        clean(p);
+        if (!fs.readdirSync(p).length) fs.rmdirSync(p);
+      } else if (!keep.has(path.resolve(p))) fs.unlinkSync(p);
+    }
+  })(dirAbs);
+}
+
 fs.mkdirSync(root, { recursive: true });
 fs.writeFileSync(path.join(root, 'index.json'), JSON.stringify({ items }, null, 1));
 console.log(`מאגר המורים: ${items.length} תמונות`);
