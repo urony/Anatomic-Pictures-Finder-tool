@@ -87,7 +87,8 @@ export function MarkStep({ images, settings, setSettings, setMarks, setCovers, r
     return () => {
       alive = false;
     };
-  }, [image?.id]);
+    // dataUrl בתלות: אחרי חיתוך ה-id זהה אבל התמונה אחרת
+  }, [image?.id, image?.dataUrl]);
 
   useEffect(() => {
     const node = wrapRef.current;
@@ -461,6 +462,9 @@ export function MarkStep({ images, settings, setSettings, setMarks, setCovers, r
           </div>
           <button className="btn small" onClick={undo} disabled={!canUndo} title="Ctrl+Z">↶ בטל</button>
           <button className="btn small" onClick={redo} disabled={!canRedo} title="Ctrl+Y">↷ שחזר</button>
+          <button className="btn small crop-top" onClick={() => image && onCrop(image.id)} disabled={!image} title="מומלץ לחתוך לפני שמסמנים מספרים">
+            ✂ חתוך{image?.crop ? ' (נחתכה)' : ''}
+          </button>
           <label className="zoom">
             הגדלה
             <input type="range" min={1} max={4} step={0.25} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />

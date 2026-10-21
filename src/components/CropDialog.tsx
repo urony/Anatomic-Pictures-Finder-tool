@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ExamImage } from '../types';
 import { FULL, cropSource, currentRect, remapAnnotations, type Rect01 } from '../lib/crop';
 import { loadHtmlImage } from '../lib/imageLoad';
+import { drawCovers, drawMarks } from '../lib/render';
+import { MARK_RADIUS } from '../lib/layout';
 
 interface Props {
   image: ExamImage;
@@ -67,6 +69,17 @@ export function CropDialog({ image, onApply, onClose }: Props) {
     const ctx = cv.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.drawImage(el, 0, 0, dw, dh);
+    // מציגים את הסימונים וההסתרות הקיימים על התמונה המקורית, כדי לראות מה ייכנס למסגרת ומה יימחק
+    const r0 = currentRect(image);
+    const toSrc = (v: number, o: number, s: number) => o + v * s;
+    const full = { x: 0, y: 0, w: dw, h: dh };
+    drawCovers(ctx, (image.covers ?? []).map((c) => ({ ...c, x: toSrc(c.x, r0.x, r0.w), y: toSrc(c.y, r0.y, r0.h), w: c.w * r0.w, h: c.h * r0.h })), full);
+    drawMarks(
+      ctx,
+      image.marks.map((m) => ({ ...m, tx: toSrc(m.tx, r0.x, r0.w), ty: toSrc(m.ty, r0.y, r0.h), lx: toSrc(m.lx, r0.x, r0.w), ly: toSrc(m.ly, r0.y, r0.h) })),
+      full,
+      { radius: MARK_RADIUS.medium * 0.9 },
+    );
     // מעמעמים את מה שמחוץ למלבן
     const rx = rect.x * dw;
     const ry = rect.y * dh;
@@ -90,7 +103,7 @@ export function CropDialog({ image, onApply, onClose }: Props) {
       ctx.fillRect(hx - 5, hy - 5, 10, 10);
       ctx.strokeRect(hx - 5, hy - 5, 10, 10);
     }
-  }, [el, rect, dw, dh]);
+  }, [el, rect, dw, dh, image]);
 
   const pos = (e: React.PointerEvent) => {
     const r = canvasRef.current!.getBoundingClientRect();
@@ -173,7 +186,7 @@ export function CropDialog({ image, onApply, onClose }: Props) {
           <h3>חיתוך התמונה</h3>
           <button className="lb-close static" onClick={onClose} aria-label="סגירה">✕</button>
         </div>
-        <p className="muted small">גררו על התמונה כדי לבחור את החלק שיישאר. אפשר להזיז את המסגרת ולשנות גודל מהפינות.</p>
+        <p className="muted small">גררו על התמונה כדי לבחור את החלק שיישאר. אפשר להזיז את המסגרת ולשנות גודל מהפינות.{image.marks.length > 0 ? ' המספרים שכבר הנחתם מוצגים על התמונה — אלה שבתוך המסגרת יישארו וימשיכו להתאים למבנים.' : ' טיפ: חתכו לפני שמסמנים מספרים.'}</p>
         <div className="crop-stage">{el ? <canvas ref={canvasRef} className="crop-canvas" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} /> : <div className="muted">טוען…</div>}</div>
         <div className="crop-bar">
           <label>
