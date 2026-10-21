@@ -4,6 +4,8 @@ import { SearchStep } from './components/SearchStep';
 import { MarkStep } from './components/MarkStep';
 import { LayoutStep } from './components/LayoutStep';
 import { ExportStep } from './components/ExportStep';
+import { CropDialog } from './components/CropDialog';
+import { applyCrop, type Rect01 } from './lib/crop';
 import { exportProject, downloadBlob, importFromProject, safeFilename } from './lib/exporters';
 
 export type Step = 'search' | 'mark' | 'layout' | 'export';
@@ -73,6 +75,27 @@ export function App() {
   const setCovers = useCallback((imageId: string, covers: Cover[]) => {
     setImages((prev) => prev.map((i) => (i.id === imageId ? { ...i, covers } : i)));
   }, []);
+
+  const [cropId, setCropId] = useState<string | null>(null);
+  const doCrop = useCallback(
+    async (rect: Rect01 | null) => {
+      const target = imagesRef.current.find((i) => i.id === cropId);
+      setCropId(null);
+      if (!target) return;
+      try {
+        const next = await applyCrop(target, rect);
+        setImages((prev) => prev.map((i) => (i.id === next.id ? next : i)));
+        // החיתוך משנה קואורדינטות — היסטוריית הביטול של הסימונים כבר לא תקפה
+        undoStack.current = [];
+        redoStack.current = [];
+        force((n) => n + 1);
+        notify({ kind: 'ok', text: rect ? 'התמונה נחתכה. אפשר לשנות או לבטל את החיתוך בכל רגע.' : 'התמונה חזרה למקור.' });
+      } catch (e) {
+        notify({ kind: 'error', text: 'החיתוך נכשל: ' + ((e as Error).message || 'שגיאה לא צפויה') });
+      }
+    },
+    [cropId, notify],
+  );
 
   const addImage = useCallback((img: ExamImage) => setImages((p) => [...p, img]), []);
   const removeImage = useCallback((id: string) => {
@@ -256,6 +279,7 @@ export function App() {
             canUndo={undoStack.current.length > 0}
             canRedo={redoStack.current.length > 0}
             goSearch={() => setStep('search')}
+            onCrop={setCropId}
             goNext={() => setStep('layout')}
           />
         )}
@@ -266,12 +290,17 @@ export function App() {
             setSettings={setSettings}
             onReorder={reorderImage}
             onMove={moveImage}
+            onCrop={setCropId}
             goBack={() => setStep('mark')}
             goNext={() => setStep('export')}
           />
         )}
         {step === 'export' && <ExportStep images={images} settings={settings} goBack={() => setStep('layout')} notify={notify} />}
       </main>
+
+      {cropId && imagesRef.current.find((i) => i.id === cropId) && (
+        <CropDialog image={imagesRef.current.find((i) => i.id === cropId)!} onApply={(r) => void doCrop(r)} onClose={() => setCropId(null)} />
+      )}
 
       {toast && (
         <div className={'toast ' + toast.kind} role="status" onClick={() => setToast(null)}>

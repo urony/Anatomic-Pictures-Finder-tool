@@ -16,6 +16,7 @@ interface Props {
   canUndo: boolean;
   canRedo: boolean;
   goSearch: () => void;
+  onCrop: (id: string) => void;
   goNext: () => void;
 }
 
@@ -48,7 +49,7 @@ function cornerPoints(c: { x: number; y: number; w: number; h: number }, dw: num
 }
 const CORNERS: Corner[] = ['tl', 'tr', 'bl', 'br'];
 
-export function MarkStep({ images, settings, setSettings, setMarks, setCovers, recordHistory, undo, redo, canUndo, canRedo, goSearch, goNext }: Props) {
+export function MarkStep({ images, settings, setSettings, setMarks, setCovers, recordHistory, undo, redo, canUndo, canRedo, goSearch, onCrop, goNext }: Props) {
   const [currentId, setCurrentId] = useState<string | null>(images[0]?.id ?? null);
   const [tool, setTool] = useState<Tool>('number');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -549,6 +550,9 @@ export function MarkStep({ images, settings, setSettings, setMarks, setCovers, r
           </select>
         </div>
 
+        <button className="btn small" onClick={() => image && onCrop(image.id)} disabled={!image} title="השארת חלק מהתמונה בלבד">
+          ✂ חיתוך התמונה{image?.crop ? ' (נחתכה)' : ''}
+        </button>
         <button className="btn small" onClick={clearImage} disabled={!image?.marks.length}>נקה את כל הסימונים בתמונה</button>
         <div className="spacer" />
         <button className="btn primary wide" onClick={goNext}>המשך לעימוד ←</button>

@@ -56,6 +56,17 @@ export interface Cover {
   color: string;
 }
 
+/** אם התמונה נחתכה: המקור ומלבן החיתוך (יחסי למקור), כדי שאפשר יהיה לשנות או לבטל */
+export interface CropInfo {
+  src: string;
+  srcW: number;
+  srcH: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface ExamImage {
   id: string;
   source: SourceId;
@@ -74,6 +85,7 @@ export interface ExamImage {
   height: number;
   marks: Mark[];
   covers?: Cover[];
+  crop?: CropInfo;
 }
 
 export type PaperId = 'A4' | 'Letter';

@@ -5,6 +5,64 @@ const API = 'https://commons.wikimedia.org/w/api.php';
 const META_FILTER =
   'LicenseShortName|LicenseUrl|Artist|Credit|ImageDescription|ObjectName|UsageTerms|Restrictions|NonFree';
 
+/**
+ * Wikimedia מגביל קצב בקשות; כשחורגים הוא עונה 429 בלי כותרות CORS, וזה נראה בדפדפן כמו כשל רשת.
+ * לכן כל הבקשות עוברות דרך תור עם מספר מוגבל של בקשות במקביל, ועם ניסיון חוזר קצר.
+ */
+const MAX_PARALLEL = 2;
+const MIN_GAP_MS = 120; // מרווח מינימלי בין תחילת בקשות
+let lastStart = 0;
+let active = 0;
+const waiting: (() => void)[] = [];
+
+function throttled<T>(task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const run = () => {
+      if (signal?.aborted) {
+        reject(new DOMException('aborted', 'AbortError'));
+        waiting.shift()?.();
+        return;
+      }
+      active++;
+      const wait = Math.max(0, lastStart + MIN_GAP_MS - Date.now());
+      lastStart = Date.now() + wait;
+      new Promise<void>((go) => setTimeout(go, wait))
+        .then(task)
+        .then(resolve, reject)
+        .finally(() => {
+          active--;
+          waiting.shift()?.();
+        });
+    };
+    if (active < MAX_PARALLEL) run();
+    else waiting.push(run);
+  });
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+let blockedUntil = 0; // אחרי כשל חוזר לא מציפים את השרת: כל בקשה נכשלת מיד למשך כמה שניות
+
+/** fetch עם ניסיון חוזר (עד 2 פעמים) על כשל רשת או 429/5xx */
+async function politeFetch(url: string, signal?: AbortSignal): Promise<Response> {
+  if (Date.now() < blockedUntil) throw new Error('Commons temporarily limited');
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+    try {
+      const res = await throttled(() => fetch(url, { signal }), signal);
+      if (res.ok || (res.status !== 429 && res.status < 500)) return res;
+      lastErr = new Error(`Commons ${res.status}`);
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') throw e;
+      lastErr = e;
+    }
+    await sleep(600 * (attempt + 1));
+  }
+  blockedUntil = Date.now() + 20000;
+  throw lastErr instanceof Error ? lastErr : new Error('Commons');
+}
+
 export interface CommonsPage {
   results: SearchResult[];
   next?: number;
@@ -52,7 +110,21 @@ function toResult(title: string, info: ImageInfo): SearchResult {
   };
 }
 
-export async function searchCommons(
+const pageCache = new Map<string, CommonsPage>();
+
+/** מטמון תוצאות בזיכרון: אותו חיפוש חוזר (למשל לחיצה חוזרת על אותו נושא) לא פונה שוב לשרת */
+export function searchCommons(query: string, kind: 'any' | 'drawing' | 'bitmap', offset: number, signal?: AbortSignal, limit = 24): Promise<CommonsPage> {
+  const key = `${query}|${kind}|${offset}|${limit}`;
+  const hit = pageCache.get(key);
+  if (hit) return Promise.resolve(hit);
+  return searchCommonsUncached(query, kind, offset, signal, limit).then((p) => {
+    if (pageCache.size > 300) pageCache.clear();
+    pageCache.set(key, p);
+    return p;
+  });
+}
+
+async function searchCommonsUncached(
   query: string,
   kind: 'any' | 'drawing' | 'bitmap',
   offset: number,
@@ -74,7 +146,7 @@ export async function searchCommons(
     iiurlwidth: '500',
     iiextmetadatafilter: META_FILTER,
   });
-  const res = await fetch(`${API}?${params}`, { signal });
+  const res = await politeFetch(`${API}?${params}`, signal);
   if (!res.ok) throw new Error(`Commons ${res.status}`);
   const j = await res.json();
   const pages: Array<{ title: string; index?: number; imageinfo?: ImageInfo[] }> = Object.values(j.query?.pages ?? {});
@@ -103,7 +175,7 @@ export async function resolveCommonsExportUrl(r: SearchResult, signal?: AbortSig
     iiprop: 'url|size|mime',
     iiurlwidth: '1920',
   });
-  const res = await fetch(`${API}?${params}`, { signal });
+  const res = await politeFetch(`${API}?${params}`, signal);
   if (!res.ok) throw new Error(`Commons ${res.status}`);
   const j = await res.json();
   const page = Object.values(j.query?.pages ?? {})[0] as { imageinfo?: ImageInfo[] } | undefined;
@@ -172,8 +244,9 @@ export async function searchCommonsMulti(
   cursor: MultiCursor | null,
   signal?: AbortSignal,
   perStrategy = 12,
+  only?: string[],
 ): Promise<{ results: SearchResult[]; cursor: MultiCursor }> {
-  const strategies = commonsStrategies(kind).filter((st) => !cursor || cursor.next[st.key] !== undefined);
+  const strategies = commonsStrategies(kind).filter((st) => (!cursor || cursor.next[st.key] !== undefined) && (!only || only.includes(st.key)));
   const t = plainTerm(term);
   const settled = await Promise.allSettled(
     strategies.map((st) => searchCommons(st.query(t), st.type, cursor?.next[st.key] ?? 0, signal, perStrategy)),

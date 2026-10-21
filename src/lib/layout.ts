@@ -176,7 +176,8 @@ function creditFor(img: ExamImage, index: number): string {
   if (img.source !== 'upload') {
     parts.push(img.license.name + (img.license.url ? ` (${img.license.url})` : ''));
     if (img.pageUrl) parts.push(img.pageUrl);
-    if (img.marks.length) parts.push('נוספו סימונים');
+    const changes = [img.crop ? 'נחתכה' : '', img.covers?.length ? 'הוסתר טקסט' : '', img.marks.length ? 'נוספו סימונים' : ''].filter(Boolean);
+    if (changes.length) parts.push(changes.join(', '));
   }
   return parts.join(' | ');
 }

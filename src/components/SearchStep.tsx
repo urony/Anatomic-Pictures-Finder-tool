@@ -13,7 +13,7 @@ import { isDefaultSafe, LEVEL_LABEL } from '../lib/license';
 type ColorFilter = 'all' | 'color' | 'bw';
 type Src = 'library' | 'commons' | 'wellcome' | 'openverse';
 const SRCS: Src[] = ['library', 'commons', 'wellcome', 'openverse'];
-const TOPIC_BATCH = 6;
+const TOPIC_BATCH = 4;
 const SRC_LABEL: Record<Src | 'upload', string> = {
   library: 'מאגר המורים',
   commons: 'Wikimedia Commons',
@@ -168,20 +168,27 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
     async (t: Topic, terms: TopicTerm[], from: number, signal: AbortSignal, seq: number) => {
       const batch = terms.slice(from, from + TOPIC_BATCH);
       setTopic((cur) => (cur && cur.topic === t ? { ...cur, loading: true } : cur));
+      let failed = 0;
       await Promise.all(
         batch.map(async (tt, i) => {
           const idx = from + i;
           try {
-            let r = await searchCommonsMulti(tt.en, 'illustration', null, signal, 4);
-            if (r.results.length === 0) r = await searchCommonsMulti(tt.en, 'all', null, signal, 4);
+            let r = await searchCommonsMulti(tt.en, 'illustration', null, signal, 4, ['illus', 'nih']);
+            if (r.results.length === 0) r = await searchCommonsMulti(tt.en, 'all', null, signal, 4, ['general']);
             if (seq !== searchSeq.current) return;
             const tagged = r.results.slice(0, 8).map((x) => ({ ...x, topic: tt.he, topicIdx: idx }));
             setResults((prev) => [...prev, ...tagged.filter((x) => !prev.some((y) => y.key === x.key))]);
           } catch {
-            /* מונח שנכשל לא עוצר את השאר */
+            failed++; // מונח שנכשל לא עוצר את השאר
           }
         }),
       );
+      if (seq === searchSeq.current && batch.length > 0 && failed === batch.length) {
+        setStates((s) => ({
+          ...s,
+          commons: { status: 'error', error: 'Wikimedia Commons מגביל זמנית את מספר הבקשות (או שאין חיבור). חכו דקה ולחצו שוב על הנושא.' },
+        }));
+      }
       if (seq !== searchSeq.current) return;
       setTopic((cur) => (cur && cur.topic === t ? { ...cur, loaded: from + batch.length, loading: false } : cur));
     },
@@ -214,7 +221,7 @@ export function SearchStep({ images, onAdd, onRemove, onMove, onNext, notify }: 
           .catch(() => setStates((s) => ({ ...s, library: { status: 'ok' } })));
       }
       await loadTopicBatch(t, topicTerms, 0, ctrl.signal, seq);
-      if (seq === searchSeq.current) setStates((s) => ({ ...s, commons: { status: 'ok' } }));
+      if (seq === searchSeq.current) setStates((s) => (s.commons.status === 'error' ? s : { ...s, commons: { status: 'ok' } }));
     },
     [terms, enabled.library, loadTopicBatch],
   );

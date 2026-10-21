@@ -195,3 +195,14 @@ main { flex: 1; min-height: 0; overflow: auto; padding: 16px; }
 .swatch { display: inline-block; width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 4px; }
 
 .credit-line { margin: 22px 0 0; font-size: 13px; color: var(--muted); letter-spacing: 0.3px; }
+
+.crop-card { background: var(--panel); border-radius: 14px; padding: 16px 18px; max-width: 840px; width: 100%; max-height: 94vh; overflow: auto; }
+.crop-head { display: flex; justify-content: space-between; align-items: center; }
+.crop-head h3 { margin: 0; color: var(--ink); font-size: 18px; }
+.lb-close.static { position: static; }
+.crop-stage { display: grid; place-items: center; background: #1b2430; border-radius: 8px; padding: 10px; margin: 8px 0; min-height: 200px; }
+.crop-canvas { touch-action: none; cursor: crosshair; max-width: 100%; }
+.crop-bar { display: flex; gap: 14px; align-items: end; flex-wrap: wrap; }
+.crop-bar label { margin: 0; min-width: 160px; }
+.crop-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.crop-btn { white-space: nowrap; }

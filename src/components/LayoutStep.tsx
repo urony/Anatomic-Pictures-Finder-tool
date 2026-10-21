@@ -8,11 +8,12 @@ interface Props {
   setSettings: (s: Settings) => void;
   onReorder: (from: number, to: number) => void;
   onMove: (id: string, dir: -1 | 1) => void;
+  onCrop: (id: string) => void;
   goBack: () => void;
   goNext: () => void;
 }
 
-export function LayoutStep({ images, settings, setSettings, onReorder, onMove, goBack, goNext }: Props) {
+export function LayoutStep({ images, settings, setSettings, onReorder, onMove, onCrop, goBack, goNext }: Props) {
   const [info, setInfo] = useState<PreviewInfo>({ pages: 0, warnings: [] });
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const set = (patch: Partial<Settings>) => setSettings({ ...settings, ...patch });
@@ -172,7 +173,8 @@ export function LayoutStep({ images, settings, setSettings, onReorder, onMove, g
             >
               <span className="grip" aria-hidden>⠿</span>
               <img src={im.dataUrl} alt="" />
-              <span className="t" title={im.title}>{im.title}</span>
+              <span className="t" title={im.title}>{im.title}{im.crop ? ' ✂' : ''}</span>
+              <button className="crop-btn" title="חיתוך התמונה" onClick={() => onCrop(im.id)}>✂ חתוך</button>
               <button title="למעלה" disabled={i === 0} onClick={() => onMove(im.id, -1)}>▲</button>
               <button title="למטה" disabled={i === images.length - 1} onClick={() => onMove(im.id, 1)}>▼</button>
             </li>

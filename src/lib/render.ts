@@ -9,11 +9,13 @@ import { loadHtmlImage } from './imageLoad';
 const imgCache = new Map<string, Promise<HTMLImageElement>>();
 
 export function getImageElement(img: ExamImage): Promise<HTMLImageElement> {
-  let p = imgCache.get(img.id);
+  // המפתח כולל את תוכן התמונה, כדי שחיתוך (אותו id, תמונה אחרת) לא יחזיר גרסה ישנה
+  const key = `${img.id}:${img.dataUrl.length}:${img.dataUrl.slice(-24)}`;
+  let p = imgCache.get(key);
   if (!p) {
     p = loadHtmlImage(img.dataUrl);
-    imgCache.set(img.id, p);
-    p.catch(() => imgCache.delete(img.id));
+    imgCache.set(key, p);
+    p.catch(() => imgCache.delete(key));
   }
   return p;
 }

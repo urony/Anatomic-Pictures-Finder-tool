@@ -387,3 +387,58 @@ describe('library topic matching (regression: Ovary_1.jpg missing under female s
     expect(score('מערכת אנדוקרינית', 'pituitary')).toBeGreaterThan(0);
   });
 });
+
+import { remapAnnotations, currentRect } from './crop';
+describe('crop remapping', () => {
+  const base = (): ExamImage => ({
+    ...img('a', 1000, 800, [1, 2, 3]),
+    marks: [
+      { id: 'm1', num: 1, tx: 0.25, ty: 0.25, lx: 0.25, ly: 0.25, line: false },
+      { id: 'm2', num: 2, tx: 0.75, ty: 0.75, lx: 0.75, ly: 0.75, line: false },
+      { id: 'm3', num: 3, tx: 0.6, ty: 0.6, lx: 0.9, ly: 0.9, line: true },
+    ],
+    covers: [{ id: 'c1', x: 0.1, y: 0.1, w: 0.3, h: 0.3, color: '#ffffff' }],
+  });
+  it('moves marks into the cropped frame and drops the ones outside', () => {
+    const r = remapAnnotations(base(), { x: 0.5, y: 0.5, w: 0.5, h: 0.5 });
+    expect(r.marks.map((m) => m.id)).toEqual(['m2', 'm3']);
+    expect(r.marks[0].lx).toBeCloseTo(0.5);
+    expect(r.marks[0].ly).toBeCloseTo(0.5);
+    expect(r.droppedMarks).toBe(1);
+    expect(r.droppedCovers).toBe(1);
+  });
+  it('keeps everything when the crop contains all annotations, rescaling coordinates', () => {
+    const r = remapAnnotations(base(), { x: 0, y: 0, w: 1, h: 1 });
+    expect(r.droppedMarks).toBe(0);
+    expect(r.marks[0].lx).toBeCloseTo(0.25);
+  });
+  it('clips covers to the crop boundary', () => {
+    const r = remapAnnotations(base(), { x: 0.2, y: 0.2, w: 0.6, h: 0.6 });
+    expect(r.covers).toHaveLength(1);
+    expect(r.covers[0].x).toBeCloseTo(0);
+    expect(r.covers[0].w).toBeCloseTo((0.4 - 0.2) / 0.6);
+  });
+  it('maps from a previous crop through the original frame (re-crop and reset)', () => {
+    const first: ExamImage = { ...base(), crop: { src: 'data:image/png;base64,AA==', srcW: 2000, srcH: 1600, x: 0.5, y: 0.5, w: 0.5, h: 0.5 }, marks: [{ id: 'm', num: 1, tx: 0.5, ty: 0.5, lx: 0.5, ly: 0.5, line: false }], covers: [] };
+    expect(currentRect(first)).toEqual({ x: 0.5, y: 0.5, w: 0.5, h: 0.5 });
+    // נקודה באמצע החיתוך = (0.75,0.75) במקור; בחיתוך החדש {0.5..1} היא באמצע
+    const again = remapAnnotations(first, { x: 0.5, y: 0.5, w: 0.5, h: 0.5 });
+    expect(again.marks[0].lx).toBeCloseTo(0.5);
+    // שחזור המקור: אותה נקודה חוזרת ל-0.75
+    const reset = remapAnnotations(first, { x: 0, y: 0, w: 1, h: 1 });
+    expect(reset.marks[0].lx).toBeCloseTo(0.75);
+  });
+  it('project import sanitizes crop info', () => {
+    const im = { ...img('a', 10, 10), crop: { src: 'javascript:alert(1)', srcW: 5, srcH: 5, x: 0, y: 0, w: 1, h: 1 } };
+    const bad = importFromProject(JSON.stringify({ format: 'anatomy-exam-builder', version: 1, settings: DEFAULT_SETTINGS, images: [im] }));
+    expect(bad.images[0].crop).toBeUndefined();
+    const ok = { ...img('b', 10, 10), crop: { src: 'data:image/png;base64,AA==', srcW: 20, srcH: 20, x: 0.1, y: 0.1, w: 0.5, h: 0.5 } };
+    const good = importFromProject(JSON.stringify({ format: 'anatomy-exam-builder', version: 1, settings: DEFAULT_SETTINGS, images: [ok] }));
+    expect(good.images[0].crop?.w).toBe(0.5);
+  });
+  it('credits mention that the image was cropped', () => {
+    const cropped: ExamImage = { ...base(), crop: { src: 'data:image/png;base64,AA==', srcW: 1000, srcH: 800, x: 0, y: 0, w: 0.5, h: 0.5 } };
+    const [p] = layoutDocument([cropped], DEFAULT_SETTINGS, measurer);
+    expect(p.creditLines.join(' ')).toContain('נחתכה');
+  });
+});

@@ -38,6 +38,15 @@ export function importFromProject(text: string): { images: ExamImage[]; settings
           color: typeof c.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(c.color) ? c.color : '#ffffff',
         }))
       : [];
+    let crop: ExamImage['crop'];
+    const ci = i.crop;
+    if (ci && typeof ci.src === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,/.test(ci.src)) {
+      const w = clamp01(ci.w, 1);
+      const h = clamp01(ci.h, 1);
+      if (w >= 0.01 && h >= 0.01) {
+        crop = { src: ci.src, srcW: Number(ci.srcW) || 1, srcH: Number(ci.srcH) || 1, x: clamp01(ci.x, 0), y: clamp01(ci.y, 0), w, h };
+      }
+    }
     images.push({
       id: String(i.id ?? Math.random().toString(36).slice(2)),
       source: i.source === 'wellcome' || i.source === 'upload' || i.source === 'openverse' || i.source === 'library' ? i.source : 'commons',
@@ -60,6 +69,7 @@ export function importFromProject(text: string): { images: ExamImage[]; settings
       height: Number(i.height) || 1,
       marks,
       covers,
+      ...(crop ? { crop } : {}),
     });
   }
   return { images, settings: {
